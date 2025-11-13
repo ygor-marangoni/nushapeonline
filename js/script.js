@@ -87,6 +87,10 @@ let lastExportBlob = null;
 let lastExportFilename = '';
 let activeWorkoutId = null;
 let workoutPendingDeletion = null;
+const workoutDragState = {
+  dayIndex: null,
+  sourceIndex: null,
+};
 
 /* EVENT BINDINGS PERFIL & AVALIAÇÃO */
 document
@@ -218,6 +222,21 @@ if (workoutDetailsCard) {
         handleWorkoutDayRename(Number(dayIndex));
       }
     }
+  });
+}
+
+if (workoutDetailsBody) {
+  const handlers = {
+    input: handleExerciseFieldInput,
+    change: handleExerciseFieldInput,
+    dragstart: handleExerciseDragStart,
+    dragover: handleExerciseDragOver,
+    dragleave: handleExerciseDragLeave,
+    drop: handleExerciseDrop,
+    dragend: handleExerciseDragEnd,
+  };
+  Object.entries(handlers).forEach(([eventName, handler]) => {
+    workoutDetailsBody.addEventListener(eventName, handler);
   });
 }
 
@@ -854,11 +873,51 @@ function loadWorkoutsFromStorage() {
     const raw = localStorage.getItem(WORKOUT_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? normalizeWorkoutCollection(parsed) : [];
   } catch (error) {
     console.warn('Não foi possível carregar os treinos.', error);
     return [];
   }
+}
+
+function normalizeWorkoutCollection(list = []) {
+  return list
+    .filter((workout) => workout && Array.isArray(workout.days))
+    .map((workout) => normalizeWorkout(workout));
+}
+
+function normalizeWorkout(workout) {
+  const normalized = {
+    ...workout,
+    metrics: workout.metrics || {},
+    days: (workout.days || []).map((day) => ({
+      ...day,
+      exercises: (day.exercises || []).map(normalizeWorkoutExercise),
+    })),
+  };
+  updateWorkoutMetrics(normalized);
+  return normalized;
+}
+
+function normalizeWorkoutExercise(exercise = {}) {
+  const parsed = parsePrescription(exercise.prescription);
+  const sets = Number.isFinite(exercise.sets) ? exercise.sets : parsed.sets || 3;
+  const reps = exercise.reps || parsed.reps || '10-12';
+  return {
+    ...exercise,
+    sets,
+    reps,
+    prescription: formatExercisePrescription({ sets, reps }),
+  };
+}
+
+function parsePrescription(prescription = '') {
+  const match = prescription.match(/(\d+)\s*x\s*([\d-]+)/i);
+  if (!match) return { sets: null, reps: null };
+  return {
+    sets: Number(match[1]),
+    reps: match[2],
+  };
 }
 
 function saveWorkoutsToStorage(data) {
@@ -929,11 +988,12 @@ function exportData() {
 
 function buildExportPayload() {
   return {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     selectedExercises,
     profile: profileData,
     evaluations,
+    workouts,
   };
 }
 
@@ -1036,10 +1096,12 @@ function applyImportedData(data = {}) {
     : [];
   profileData = data.profile || {};
   evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
+  workouts = Array.isArray(data.workouts) ? normalizeWorkoutCollection(data.workouts) : [];
 
   saveSelectedExercises();
   saveProfileToStorage(profileData);
   saveEvaluationsToStorage(evaluations);
+  saveWorkoutsToStorage(workouts);
 
   updateSelectedCount();
   render(exercises, null);
@@ -1047,6 +1109,7 @@ function applyImportedData(data = {}) {
   populateProfileForm(profileData);
   renderEvaluationsUI();
   updateGraphRepresentations();
+  renderWorkoutCards();
 }
 
 function formatBytes(bytes) {
@@ -1082,7 +1145,7 @@ function renderWorkoutCards() {
   workoutList.innerHTML = workouts
     .map(
       (workout) => `
-      <article class="workout-card" data-workout-id="${workout.id}">
+      <article class="workout-card" data-workout-id="${workout.id}" role="button" tabindex="0" aria-label="Abrir detalhes do ${workout.name}">
         <small>${new Date(workout.createdAt).toLocaleDateString('pt-BR')}</small>
         <h4>${workout.name}</h4>
         <p style="color: var(--muted); margin: 6px 0;">${workout.days.length} dia(s) • ${workout.config.division}</p>
@@ -1095,6 +1158,15 @@ function renderWorkoutCards() {
 workoutList?.addEventListener('click', (event) => {
   const card = event.target.closest('[data-workout-id]');
   if (!card) return;
+  showWorkoutDetails(card.dataset.workoutId);
+});
+
+workoutList?.addEventListener('keydown', (event) => {
+  const card = event.target.closest('[data-workout-id]');
+  if (!card) return;
+  const actionableKeys = ['Enter', ' '];
+  if (!actionableKeys.includes(event.key)) return;
+  event.preventDefault();
   showWorkoutDetails(card.dataset.workoutId);
 });
 
@@ -1291,10 +1363,10 @@ function getDivisionTemplate(division, days) {
 }
 
 const volumePresets = {
-  low: { exercisesPerMuscle: 1, prescription: '3x8-10', series: 3 },
-  medium: { exercisesPerMuscle: 2, prescription: '4x10-12', series: 4 },
-  high: { exercisesPerMuscle: 3, prescription: '5x12-15', series: 5 },
-  deload: { exercisesPerMuscle: 1, prescription: '2x8-10', series: 2 },
+  low: { exercisesPerMuscle: 1, sets: 3, reps: '8-10' },
+  medium: { exercisesPerMuscle: 2, sets: 4, reps: '10-12' },
+  high: { exercisesPerMuscle: 3, sets: 5, reps: '12-15' },
+  deload: { exercisesPerMuscle: 1, sets: 2, reps: '8-10' },
 };
 
 function pickExerciseFromPool(
@@ -1339,6 +1411,28 @@ function findBestCandidate(dataset, usageTracker, usedInDay, lastExerciseId) {
   return null;
 }
 
+function formatExercisePrescription(exercise = {}) {
+  const sets = Number.isFinite(exercise.sets) ? exercise.sets : '';
+  const reps = exercise.reps || '';
+  if (!sets && !reps) return '--';
+  if (!sets) return reps;
+  if (!reps) return `${sets}x`;
+  return `${sets}x${reps}`;
+}
+
+function updateWorkoutMetrics(workout) {
+  if (!workout || !Array.isArray(workout.days)) return;
+  const totalSets = workout.days.reduce((acc, day) => {
+    const daySets = (day.exercises || []).reduce(
+      (sum, exercise) => sum + (Number(exercise.sets) || 0),
+      0,
+    );
+    return acc + daySets;
+  }, 0);
+  workout.metrics = workout.metrics || {};
+  workout.metrics.volumeTotal = totalSets;
+}
+
 function generateWorkoutPlan(execTime = 0) {
   const config = workoutState.config;
   let pool =
@@ -1355,6 +1449,10 @@ function generateWorkoutPlan(execTime = 0) {
 
   const templates = getDivisionTemplate(config.division, config.daysPerWeek);
   const volumePreset = volumePresets[config.volume] || volumePresets.medium;
+  const defaultPrescription = formatExercisePrescription({
+    sets: volumePreset.sets,
+    reps: volumePreset.reps,
+  });
   const usageTracker = new Map();
 
   const days = templates.map((template, index) => {
@@ -1380,7 +1478,9 @@ function generateWorkoutPlan(execTime = 0) {
             name: picked.name,
             muscle: picked.muscle,
             equipment: picked.equipment,
-            prescription: volumePreset.prescription,
+            sets: volumePreset.sets,
+            reps: volumePreset.reps,
+            prescription: defaultPrescription,
           });
           lastExerciseId = picked.id;
         }
@@ -1406,7 +1506,9 @@ function generateWorkoutPlan(execTime = 0) {
             name: fallback.name,
             muscle: fallback.muscle,
             equipment: fallback.equipment,
-            prescription: volumePreset.prescription,
+            sets: volumePreset.sets,
+            reps: volumePreset.reps,
+            prescription: defaultPrescription,
           });
           lastExerciseId = fallback.id;
         }
@@ -1436,11 +1538,13 @@ function generateWorkoutPlan(execTime = 0) {
     0,
   );
   const volumeTotal = days.reduce(
-    (acc, day) => acc + day.exercises.length * volumePreset.series,
+    (acc, day) =>
+      acc +
+      day.exercises.reduce((sum, exercise) => sum + (Number(exercise.sets) || volumePreset.sets), 0),
     0,
   );
 
-  return {
+  const plan = {
     id: `${Date.now()}`,
     name: `Treino ${workouts.length + 1}`,
     createdAt: new Date().toISOString(),
@@ -1453,6 +1557,7 @@ function generateWorkoutPlan(execTime = 0) {
       volumeTotal,
     },
   };
+  return normalizeWorkout(plan);
 }
 
 function calculateEquipmentSwitches(exercisesList = []) {
@@ -1484,23 +1589,182 @@ function showWorkoutDetails(id) {
             </button>
           </div>
           ${day.exercises
-            .map(
-              (exercise) => `
-                <div class="workout-exercise-row">
-                  <div>
+            .map((exercise, exerciseIndex) => {
+              const prescription = formatExercisePrescription(exercise);
+              return `
+                <div
+                  class="workout-exercise-row"
+                  data-day-index="${index}"
+                  data-exercise-index="${exerciseIndex}"
+                >
+                  <button
+                    type="button"
+                    class="drag-handle"
+                    aria-label="Reordenar ${exercise.name}"
+                    tabindex="-1"
+                    draggable="true"
+                  >
+                    <span></span><span></span><span></span>
+                  </button>
+                  <div class="exercise-info">
                     <strong>${exercise.name}</strong>
                     <p style="font-size: 12px; color: var(--muted); margin: 2px 0 0;">${exercise.muscle} • ${exercise.equipment}</p>
                   </div>
-                  <span>${exercise.prescription}</span>
+                  <div class="exercise-controls">
+                    <label class="exercise-field">
+                      <span>Séries</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value="${Number(exercise.sets) || ''}"
+                        data-exercise-set
+                        data-day-index="${index}"
+                        data-exercise-index="${exerciseIndex}"
+                        aria-label="Editar séries de ${exercise.name}"
+                      />
+                    </label>
+                    <label class="exercise-field">
+                      <span>Reps</span>
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        value="${exercise.reps || ''}"
+                        data-exercise-reps
+                        data-day-index="${index}"
+                        data-exercise-index="${exerciseIndex}"
+                        aria-label="Editar repetições de ${exercise.name}"
+                      />
+                    </label>
+                    <span class="exercise-prescription" data-prescription-label>${prescription}</span>
+                  </div>
                 </div>
-              `,
-            )
+              `;
+            })
             .join('')}
         </div>
       `,
     )
     .join('');
   workoutDetailsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateWorkoutDetailsMeta(workout) {
+  if (!workoutDetailsMeta || !workout) return;
+  workoutDetailsMeta.textContent = `${workout.days.length} dia(s) • ${workout.config.division} • Volume total: ${workout.metrics.volumeTotal} séries`;
+}
+
+function handleExerciseFieldInput(event) {
+  const target = event.target;
+  if (!target.matches('[data-exercise-set], [data-exercise-reps]')) return;
+  if (!activeWorkoutId) return;
+  const dayIndex = Number(target.dataset.dayIndex);
+  const exerciseIndex = Number(target.dataset.exerciseIndex);
+  const workout = workouts.find((w) => w.id === activeWorkoutId);
+  if (!workout || !workout.days?.[dayIndex]?.exercises?.[exerciseIndex]) return;
+  const exercise = workout.days[dayIndex].exercises[exerciseIndex];
+
+  if (target.matches('[data-exercise-set]')) {
+    let value = Number(target.value);
+    if (!Number.isFinite(value) || value < 1) value = 1;
+    if (value > 40) value = 40;
+    exercise.sets = value;
+    target.value = value;
+  } else {
+    let repsValue = target.value.replace(/[^0-9-]/g, '');
+    repsValue = repsValue.replace(/^-/, '');
+    repsValue = repsValue.replace(/-{2,}/g, '-');
+    repsValue = repsValue.replace(/-$/, '');
+    repsValue = repsValue || exercise.reps || '10-12';
+    exercise.reps = repsValue;
+    target.value = repsValue;
+  }
+
+  exercise.prescription = formatExercisePrescription(exercise);
+  const label = target.closest('.exercise-controls')?.querySelector('[data-prescription-label]');
+  if (label) label.textContent = exercise.prescription;
+
+  updateWorkoutMetrics(workout);
+  saveWorkoutsToStorage(workouts);
+  renderWorkoutCards();
+  updateWorkoutDetailsMeta(workout);
+}
+
+function handleExerciseDragStart(event) {
+  if (!event.target.closest('.drag-handle')) {
+    event.preventDefault();
+    return;
+  }
+  const row = event.target.closest('[data-exercise-index]');
+  if (!row) return;
+  workoutDragState.dayIndex = Number(row.dataset.dayIndex);
+  workoutDragState.sourceIndex = Number(row.dataset.exerciseIndex);
+  row.classList.add('is-dragging');
+  event.dataTransfer?.setData('text/plain', '');
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function handleExerciseDragOver(event) {
+  const row = event.target.closest('[data-exercise-index]');
+  if (!row) return;
+  const dayIndex = Number(row.dataset.dayIndex);
+  if (dayIndex !== workoutDragState.dayIndex) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  row.classList.add('is-drop-target');
+}
+
+function handleExerciseDragLeave(event) {
+  const row = event.target.closest('[data-exercise-index]');
+  if (!row) return;
+  row.classList.remove('is-drop-target');
+}
+
+function handleExerciseDrop(event) {
+  const row = event.target.closest('[data-exercise-index]');
+  if (!row) return;
+  const targetIndex = Number(row.dataset.exerciseIndex);
+  const targetDayIndex = Number(row.dataset.dayIndex);
+  if (targetDayIndex !== workoutDragState.dayIndex) return;
+  event.preventDefault();
+  row.classList.remove('is-drop-target');
+  if (targetIndex === workoutDragState.sourceIndex) return;
+  reorderWorkoutExercises(targetDayIndex, workoutDragState.sourceIndex, targetIndex);
+  resetWorkoutDragState();
+}
+
+function handleExerciseDragEnd() {
+  document
+    .querySelectorAll('.workout-exercise-row.is-dragging, .workout-exercise-row.is-drop-target')
+    .forEach((row) => row.classList.remove('is-dragging', 'is-drop-target'));
+  resetWorkoutDragState();
+}
+
+function resetWorkoutDragState() {
+  workoutDragState.dayIndex = null;
+  workoutDragState.sourceIndex = null;
+}
+
+function reorderWorkoutExercises(dayIndex, fromIndex, toIndex) {
+  if (!activeWorkoutId) return;
+  const workout = workouts.find((w) => w.id === activeWorkoutId);
+  if (!workout) return;
+  const exercises = workout.days?.[dayIndex]?.exercises;
+  if (!Array.isArray(exercises)) return;
+  if (
+    fromIndex < 0 ||
+    fromIndex >= exercises.length ||
+    toIndex < 0 ||
+    toIndex >= exercises.length
+  ) {
+    return;
+  }
+  const [moved] = exercises.splice(fromIndex, 1);
+  exercises.splice(toIndex, 0, moved);
+  updateWorkoutMetrics(workout);
+  saveWorkoutsToStorage(workouts);
+  renderWorkoutCards();
+  showWorkoutDetails(workout.id);
 }
 
 function handleWorkoutRename() {

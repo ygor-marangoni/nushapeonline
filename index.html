@@ -91,7 +91,7 @@
 
     </aside>
 
-    <main class="main">
+    <main id="mainContent" class="main" tabindex="-1">
       <!-- PÁGINA: EXERCÍCIOS -->
       <div id="page-exercicios" class="page active">
         <div class="search-card">
@@ -108,10 +108,12 @@
           <div class="search-controls">
             <div class="search-input-wrapper">
               <span class="search-icon">🔎</span>
+              <label for="searchInput" class="sr-only">Buscar exercícios</label>
               <input type="text" class="search-input" id="searchInput" placeholder="Digite o nome do exercício..." oninput="search()">
             </div>
 
             <div class="select-wrapper">
+              <label for="muscleSelect" class="sr-only">Filtrar por grupo muscular</label>
               <select class="custom-select" id="muscleSelect" onchange="search()">
                 <option value="Todos">Todos os Grupos</option>
                 <option value="Peitoral">Peitoral</option>
@@ -622,7 +624,7 @@
               <li data-task="coloring">Colorindo dias (Welch-Powell)</li>
             </ul>
           </div>
-          <div class="generation-result" id="generationResult" style="display:none;"></div>
+          <div class="generation-result" id="generationResult" style="display:none;" aria-live="polite"></div>
           <div class="workout-step-actions">
             <button type="button" class="button-secondary prev" data-action="back">← Voltar</button>
             <button type="button" class="button-primary next" id="generateWorkoutBtn">Gerar treino</button>
