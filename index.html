@@ -52,7 +52,10 @@
           <span>🏋️</span><span>Exercícios</span>
         </button>
         <button class="sidebar-item" data-page="treinos" onclick="navigateTo('treinos')">
-          <span>📅</span><span>Meus Treinos</span>
+          <span>📝</span><span>Meus Treinos</span>
+        </button>
+        <button class="sidebar-item" data-page="grafo" onclick="navigateTo('grafo')">
+          <span>❄️</span><span>Grafo dos Exercícios</span>
         </button>
         <button class="sidebar-item" data-page="progresso" onclick="navigateTo('progresso')">
           <span>📊</span><span>Progresso</span>
@@ -63,10 +66,11 @@
       </div>
 
       <div class="filter-section fases">
-        <div class="filter-title">PRÓXIMAS FASES</div>
-        <button class="sidebar-item" disabled><span>🔐</span><span>Hashing</span></button>
-        <button class="sidebar-item" disabled><span>🗜️</span><span>Huffman</span></button>
-        <button class="sidebar-item" disabled><span>🕸️</span><span>Grafos</span></button>
+        <div class="filter-title">IMPLEMENTAÇÕS FUTURAS</div>
+        <button class="sidebar-item" disabled><span>📅 </span><span>Calendário de Treinos</span></button>
+        <button class="sidebar-item" disabled><span>⚡</span><span> Sessão do Dia</span></button>
+        <button class="sidebar-item" disabled><span>🏆</span><span> Metas e Conquistas</span></button>
+        <button class="sidebar-item" disabled><span>📖</span><span> Biblioteca de Treinos </span></button>
         <button class="export-btn-mobile">
           <div class="icon">
             <svg viewBox="0 0 14 15">
@@ -144,25 +148,101 @@
       <!-- PÁGINA: MEUS TREINOS -->
       <div id="page-treinos" class="page">
         <div class="info-card">
-          <h2 class="search-title">Meus Treinos 📅</h2>
-          <p style="color: var(--muted); margin-top: 12px;">Aqui você encontrará seus treinos personalizados montados a partir dos exercícios selecionados.</p>
+          <div class="create-workout-cta">
+            <div>
+              <p class="cta-kicker">Assistente Inteligente</p>
+              <h2>Monte treinos personalizados automaticamente</h2>
+              <p>Defina seus parâmetros e o Nushape cria sequências equilibradas usando teoria dos grafos.</p>
+              <button class="button-primary btn-create-workout" data-open-workout-modal>
+                <span>Criar novo treino </span><span class="icon">+</span>
+              </button>
+              <div class="cta-stats">
+                <div>
+                  <span style="font-weight: 500; color: var(--text);">Treinos salvos</span>
+                  <strong id="workoutCount">0</strong>
+                </div>
+                <div>
+                  <span style="font-weight: 500; color: var(--text);">Exercícios selecionados</span>
+                  <strong id="selectedCountTreinos">0</strong>
+                </div>
+              </div>
+            </div>
 
-          <div class="stats-grid" style="margin-top: 32px;">
-            <div class="stat-card">
-              <h3>Exercícios Selecionados</h3>
-              <div class="value" id="selectedCountTreinos">0</div>
+          </div>
+        </div>
+
+        <div class="info-card workout-list-card">
+          <div class="workout-list-header">
+            <div>
+              <h3>Seus treinos</h3>
+              <p>Selecione um treino para visualizar detalhes ou crie um novo para a próxima semana.</p>
             </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%);">
-              <h3>Treinos Criados</h3>
-              <div class="value">0</div>
+            <button class="button-secondary" data-open-workout-modal>Montar treino</button>
+          </div>
+
+          <div id="workoutList" class="workout-list"></div>
+          <div id="workoutEmptyState" class="empty-state small">
+            <div class="empty-icon">📄</div>
+            <p style="font-weight: 600;">Nenhum treino criado ainda</p>
+            <p style="font-size: 13px; color: var(--muted); margin-top: 6px;">Clique em “Criar novo treino” para começar.</p>
+          </div>
+        </div>
+
+        <div class="info-card workout-details-card" id="workoutDetails" style="display:none;">
+          <div class="workout-details-header">
+            <div>
+              <h3 id="workoutDetailsTitle"></h3>
+              <p id="workoutDetailsMeta" style="color: var(--muted); margin-top: 4px;"></p>
             </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);">
-              <h3>Semanas Ativas</h3>
-              <div class="value">0</div>
+            <div class="details-actions">
+              <button type="button" class="icon-square-button" data-edit-workout aria-label="Renomear treino">
+                <img src="assets/icons/botao-editar.png" alt="" width="20" height="20">
+              </button>
+              <button type="button" class="icon-square-button danger" data-delete-workout aria-label="Excluir treino">
+                <img src="assets/icons/lixeira-de-reciclagem.png" alt="" width="20" height="20">
+              </button>
+              <button class="button-outline" id="closeDetailsBtn">Fechar</button>
+            </div>
+          </div>
+          <div id="workoutDetailsBody"></div>
+        </div>
+      </div>
+
+      <!-- PÁGINA: GRAFO -->
+      <div id="page-grafo" class="page">
+        <div class="info-card">
+          <div class="graph-card-header">
+            <div>
+              <h2 class="search-title">Grafo dos Exercícios ❄️</h2>
+              <p style="color: var(--muted); margin-top: 8px; margin-bottom:16px;">Cada vértice representa um exercício selecionado e cada aresta indica o custo/direção de transição.</p>
             </div>
           </div>
 
-          <div id="selectedExercisesList" style="margin-top: 32px;"></div>
+          <div id="graphEmptyState" class="empty-state small" style="display:none;">
+            <div class="empty-icon">🔌</div>
+            <p style="font-weight: 600;">Nenhum exercício selecionado</p>
+            <p style="font-size: 13px; color: var(--muted); margin-top: 6px;">Escolha alguns exercícios para visualizar as representações do grafo.</p>
+          </div>
+
+          <div class="graph-panels" id="graphPanels">
+            <section class="graph-panel">
+              <div class="graph-panel-header">
+                <h4>Matriz de Adjacência</h4>
+                <p>Mostra o peso da transição entre cada par de exercícios.</p>
+              </div>
+              <div class="graph-table-wrapper">
+                <table class="graph-table" id="adjacencyMatrixTable"></table>
+              </div>
+            </section>
+
+            <section class="graph-panel">
+              <div class="graph-panel-header">
+                <h4>Lista de Adjacência</h4>
+                <p>Vizinho → peso da aresta (custo de troca).</p>
+              </div>
+              <div class="graph-list" id="adjacencyListContainer"></div>
+            </section>
+          </div>
         </div>
       </div>
 
@@ -307,7 +387,10 @@
               <div class="backup-actions">
                 <div class="backup-buttons">
                   <button type="button" class="button-outline" data-import-button> Importar dados (.nushape)</button>
-                  <button type="button" class="button-danger" data-open-clear> Limpar todos os dados</button>
+                  <button type="button" class="button-danger" data-open-clear>
+                    <img src="assets/icons/lixeira-de-reciclagem-branca.png" alt="" width="auto" height="15px">
+                    Limpar todos os dados
+                  </button>
                 </div>
                 <p class="backup-hint">Use o botão “Exportar dados” no topo para gerar um arquivo comprimido e restaure aqui quando desejar.</p>
                 <input type="file" id="importInput" accept=".nushape,application/json" hidden>
@@ -444,12 +527,141 @@
     </div>
   </div>
 
+  <div id="workoutModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="workoutModalTitle">
+    <div class="modal-card workout-modal">
+      <div class="modal-header">
+        <div>
+          <h3 id="workoutModalTitle">Criar novo treino</h3>
+          <p>Configure os parâmetros e deixe a IA gerar um plano equilibrado.</p>
+        </div>
+        <button type="button" class="modal-close" data-close-workout aria-label="Fechar modal">×</button>
+      </div>
+
+      <div class="workout-stepper" role="tablist" aria-label="Etapas de criação do treino">
+        <button type="button" class="step-dot is-active" data-step-target="1" aria-label="Etapa 1 - Configurações">
+          <span class="step-index" aria-hidden="true">1</span>
+        </button>
+        <span class="step-connector" aria-hidden="true"></span>
+        <button type="button" class="step-dot" data-step-target="2" aria-label="Etapa 2 - Exercícios">
+          <span class="step-index" aria-hidden="true">2</span>
+        </button>
+        <span class="step-connector" aria-hidden="true"></span>
+        <button type="button" class="step-dot" data-step-target="3" aria-label="Etapa 3 - Geração">
+          <span class="step-index" aria-hidden="true">3</span>
+        </button>
+      </div>
+
+      <form id="workoutForm">
+        <div class="workout-step is-active" data-step="1">
+          <h4>🎯 Configurações básicas</h4>
+          <div class="workout-field-group">
+            <span>Quantos dias por semana?</span>
+            <div class="pill-options" id="daysOptions">
+              <button type="button" data-value="3">3 dias</button>
+              <button type="button" data-value="4">4 dias</button>
+              <button type="button" data-value="5">5 dias</button>
+              <button type="button" data-value="6">6 dias</button>
+            </div>
+          </div>
+
+          <div class="workout-field-group">
+            <span>Divisão de treino</span>
+            <div class="card-options" id="divisionOptions">
+              <label><input type="radio" name="division" value="Bro Split"> Bro Split</label>
+              <label><input type="radio" name="division" value="PPL"> Push / Pull / Legs</label>
+              <label><input type="radio" name="division" value="Upper Lower"> Upper / Lower</label>
+              <label><input type="radio" name="division" value="PPL + UL"> PPL + Upper/Lower</label>
+              <label><input type="radio" name="division" value="Full Body"> Full Body</label>
+              <label><input type="radio" name="division" value="Sem Preferência" checked> Sem preferência</label>
+            </div>
+          </div>
+
+          <div class="workout-field-group">
+            <span>Volume semanal</span>
+            <div class="card-options" id="volumeOptions">
+              <label><input type="radio" name="volume" value="low"> 🔴 Baixo (8-10 séries)</label>
+              <label><input type="radio" name="volume" value="medium" checked> 🟡 Médio (12-16 séries)</label>
+              <label><input type="radio" name="volume" value="high"> 🟢 Alto (18-22 séries)</label>
+              <label><input type="radio" name="volume" value="deload"> 🔵 Deload (6-8 séries)</label>
+            </div>
+          </div>
+
+          <div class="workout-step-actions">
+            <span></span>
+            <button type="button" class="button-primary next" data-action="next">Próximo →</button>
+          </div>
+        </div>
+
+        <div class="workout-step" data-step="2">
+          <h4>💪 Seleção de exercícios</h4>
+
+          <label class="toggle-option">
+            <input type="radio" name="exerciseSource" value="ai" checked>
+            <span>Deixar o programa escolher por mim</span>
+          </label>
+          <label class="toggle-option">
+            <input type="radio" name="exerciseSource" value="selected">
+            <span>Usar exercícios já selecionados</span>
+          </label>
+
+          <div class="requirements-card" id="exerciseRequirements"></div>
+          <p class="requirement-hint" id="requirementsHint"></p>
+          <div class="workout-step-actions">
+            <button type="button" class="button-secondary prev" data-action="back">← Voltar</button>
+            <button type="button" class="button-primary next" data-action="next">Próximo →</button>
+          </div>
+        </div>
+
+        <div class="workout-step" data-step="3">
+          <h4>⚙️ Montando treino...</h4>
+          <div class="generation-progress" id="generationProgress">
+            <div class="progress-bar"><span></span></div>
+            <ul>
+              <li data-task="recovery">Validando recuperação muscular</li>
+              <li data-task="equipment">Agrupando por equipamento</li>
+              <li data-task="ordering">Otimizando ordem (Dijkstra)</li>
+              <li data-task="coloring">Colorindo dias (Welch-Powell)</li>
+            </ul>
+          </div>
+          <div class="generation-result" id="generationResult" style="display:none;"></div>
+          <div class="workout-step-actions">
+            <button type="button" class="button-secondary prev" data-action="back">← Voltar</button>
+            <button type="button" class="button-primary next" id="generateWorkoutBtn">Gerar treino</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="deleteWorkoutModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="deleteWorkoutTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 id="deleteWorkoutTitle">Excluir treino</h3>
+          <p>Essa ação removerá o treino selecionado e todos os dias vinculados.</p>
+        </div>
+        <button type="button" class="modal-close" data-close-delete-workout aria-label="Fechar modal">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--muted);">Tem certeza de que deseja excluir o treino <strong id="deleteWorkoutName"></strong>? Essa ação não pode ser desfeita.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="button-outline" data-close-delete-workout>Cancelar</button>
+        <button type="button" class="button-danger" id="confirmDeleteWorkoutBtn">
+          <img src="assets/icons/lixeira-de-reciclagem-branca.png" alt="" width="auto" height="18">
+          Excluir treino
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/exercicios.js" defer></script>
   <script src="js/util.js" defer></script>
   <script src="js/buscaSequencial.js" defer></script>
   <script src="js/buscaBinaria.js" defer></script>
   <script src="js/rabinKarp.js" defer></script>
   <script src="js/exportBtn.js"></script>
+  <script src="js/graph-representation.js" defer></script>
   <script src="js/huffman.js" defer></script>
   <script src="js/script.js" defer></script>
 </body>

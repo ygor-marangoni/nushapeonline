@@ -85,3 +85,42 @@ _Os valores variam conforme a redundância dos dados; quanto mais repetições (
 - `js/huffman.js` – algoritmo Huffman puro.
 - `js/script.js` – integração (estado, métricas, modal, import/export).
 - `js/exportBtn.js` – feedback visual do botão “Exportar dados”.
+
+---
+
+## Grafos – Módulo 1 (Representações)
+
+### Arquitetura geral
+- **`algorithms/graphs/graph-representation.js`**: classe `Graph` com `vertices`, `edges`, flags `directed`/`weighted` e métodos `addVertex`, `addEdge`, `getNeighbors`, `getDegree`, `toAdjacencyMatrix` e `toAdjacencyList`.
+- **`js/script.js`**: monta o grafo a partir dos exercícios selecionados (`buildWorkoutGraph`) e injeta a matriz/lista na página *Meus Treinos*.
+- **UI**: o card “Representação do Grafo dos Exercícios” mostra, lado a lado, a matriz de adjacência e a lista de adjacências para qualquer conjunto de exercícios escolhidos.
+
+### Modelagem aplicada
+- **Vértices** → cada exercício (`id`, `nome`, `músculo`, `equipamento`).
+- **Arestas** → transições entre exercícios, com peso calculado por custo de troca (equipamento + músculo) e dependências de recuperação (ex.: `Costas → Bíceps`).
+- **Direção** → usada para representar quem deve vir antes (respeitando descanso).
+
+### Representações
+1. **Matriz de adjacência**: `matrix[i][j] = peso` (0 quando não há aresta). Renderizada como tabela responsiva.
+2. **Lista de adjacência**: `{ exercicio: [{ neighbor, weight }] }`, exibida como chips “Nome • Peso”.
+
+Exemplo reduzido (3 exercícios selecionados):
+```
+Matriz
+            Supino  Crucifixo  Rosca
+Supino        0        2         6
+Crucifixo     2        0         6
+Rosca         6        6         0
+
+Lista
+Supino → Crucifixo • 2, Rosca Direta • 6
+Crucifixo → Supino • 2, Rosca Direta • 6
+Rosca Direta → Supino • 6, Crucifixo • 6
+```
+
+### Complexidade
+- Construção (para `V` vértices): `O(V²)` ao calcular pesos para cada par.
+- `toAdjacencyMatrix`: `O(V²)` para preencher a matriz.
+- `toAdjacencyList`: `O(V + E)` (E = nº de arestas).
+
+Essas estruturas serão reutilizadas nas próximas etapas (buscas em grafos, Dijkstra, coloração etc.), formando a base para a geração automática de treinos descrita no plano incremental.

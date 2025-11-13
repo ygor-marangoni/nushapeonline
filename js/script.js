@@ -6,14 +6,16 @@ const sorted = [...exercises].sort((a, b) =>
   a.name.localeCompare(b.name, 'pt-BR'),
 );
 const ACTIVE_PAGE_STORAGE_KEY = 'nushape_active_page';
-const VALID_PAGES = ['exercicios', 'treinos', 'progresso', 'dados'];
+const VALID_PAGES = ['exercicios', 'treinos', 'grafo', 'progresso', 'dados'];
 
 /* PERFIL & AVALIAÇÕES - ESTADO */
 const PROFILE_STORAGE_KEY = 'nushape_profile';
 const EVALUATION_STORAGE_KEY = 'nushape_evaluations';
+const WORKOUT_STORAGE_KEY = 'nushape_workouts';
 
 let profileData = loadProfileFromStorage();
 let evaluations = loadEvaluationsFromStorage();
+let workouts = loadWorkoutsFromStorage();
 
 const profileForm = document.getElementById('profileForm');
 const profileFeedback = document.getElementById('profileFeedback');
@@ -35,9 +37,56 @@ const exportAvgDepthEl = document.getElementById('exportAvgDepth');
 const exportTreeHeightEl = document.getElementById('exportTreeHeight');
 const importInput = document.getElementById('importInput');
 const importTrigger = document.querySelector('[data-import-button]');
+const deleteWorkoutModal = document.getElementById('deleteWorkoutModal');
+const deleteWorkoutName = document.getElementById('deleteWorkoutName');
+const confirmDeleteWorkoutBtn = document.getElementById('confirmDeleteWorkoutBtn');
+const workoutModal = document.getElementById('workoutModal');
+const workoutForm = document.getElementById('workoutForm');
+const workoutList = document.getElementById('workoutList');
+const workoutEmptyState = document.getElementById('workoutEmptyState');
+const workoutCountEl = document.getElementById('workoutCount');
+const workoutDetailsCard = document.getElementById('workoutDetails');
+const workoutDetailsTitle = document.getElementById('workoutDetailsTitle');
+const workoutDetailsMeta = document.getElementById('workoutDetailsMeta');
+const workoutDetailsBody = document.getElementById('workoutDetailsBody');
+const closeDetailsBtn = document.getElementById('closeDetailsBtn');
+const daysOptions = document.getElementById('daysOptions');
+const divisionOptions = document.getElementById('divisionOptions');
+const volumeOptions = document.getElementById('volumeOptions');
+const requirementsContainer = document.getElementById('exerciseRequirements');
+const requirementsHint = document.getElementById('requirementsHint');
+const generateWorkoutBtn = document.getElementById('generateWorkoutBtn');
+const generationProgress = document.getElementById('generationProgress');
+const generationResult = document.getElementById('generationResult');
+const stepDots = document.querySelectorAll('.step-dot');
+const workoutStepElements = document.querySelectorAll('.workout-step');
+const openWorkoutButtons = document.querySelectorAll('[data-open-workout-modal]');
+const closeWorkoutButtons = document.querySelectorAll('[data-close-workout]');
+
+const MIN_EXERCISES = {
+  Peitoral: 2,
+  Costas: 2,
+  Pernas: 3,
+  Braços: 2,
+  Ombros: 1,
+};
+
+const workoutState = {
+  currentStep: 1,
+  furthestStep: 1,
+  generationFinished: false,
+  config: {
+    daysPerWeek: 4,
+    division: 'Sem Preferência',
+    volume: 'medium',
+    exerciseSource: 'ai',
+  },
+};
 
 let lastExportBlob = null;
 let lastExportFilename = '';
+let activeWorkoutId = null;
+let workoutPendingDeletion = null;
 
 /* EVENT BINDINGS PERFIL & AVALIAÇÃO */
 document
@@ -101,6 +150,7 @@ document.addEventListener('keydown', (event) => {
   if (evaluationModal?.classList.contains('is-active')) closeEvaluationModal();
   if (clearDataModal?.classList.contains('is-active')) closeClearModal();
   if (exportModal?.classList.contains('is-active')) closeExportModal();
+  if (deleteWorkoutModal?.classList.contains('is-active')) closeDeleteWorkoutModal();
 });
 
 document
@@ -117,12 +167,87 @@ if (downloadExportBtn) {
   downloadExportBtn.addEventListener('click', handleExportDownload);
 }
 
+document
+  .querySelectorAll('[data-close-delete-workout]')
+  .forEach((button) => button.addEventListener('click', closeDeleteWorkoutModal));
+
+if (deleteWorkoutModal) {
+  deleteWorkoutModal.addEventListener('click', (event) => {
+    if (event.target === deleteWorkoutModal) closeDeleteWorkoutModal();
+  });
+}
+
+if (confirmDeleteWorkoutBtn) {
+  confirmDeleteWorkoutBtn.addEventListener('click', confirmWorkoutDeletion);
+}
+
 if (importTrigger && importInput) {
   importTrigger.addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
 }
 
 window.exportData = exportData;
+
+openWorkoutButtons.forEach((btn) => btn.addEventListener('click', openWorkoutModal));
+closeWorkoutButtons.forEach((btn) => btn.addEventListener('click', closeWorkoutModal));
+workoutModal?.addEventListener('click', (event) => {
+  if (event.target === workoutModal) closeWorkoutModal();
+});
+if (closeDetailsBtn) {
+  closeDetailsBtn.addEventListener('click', () => {
+    workoutDetailsCard.style.display = 'none';
+  });
+}
+
+if (workoutDetailsCard) {
+  workoutDetailsCard.addEventListener('click', (event) => {
+    const editWorkoutBtn = event.target.closest('[data-edit-workout]');
+    if (editWorkoutBtn) {
+      handleWorkoutRename();
+      return;
+    }
+    const deleteWorkoutBtn = event.target.closest('[data-delete-workout]');
+    if (deleteWorkoutBtn) {
+      if (activeWorkoutId) openDeleteWorkoutModal(activeWorkoutId);
+      return;
+    }
+    const editDayBtn = event.target.closest('[data-edit-day]');
+    if (editDayBtn) {
+      const { dayIndex } = editDayBtn.dataset;
+      if (typeof dayIndex !== 'undefined') {
+        handleWorkoutDayRename(Number(dayIndex));
+      }
+    }
+  });
+}
+
+if (daysOptions) {
+  daysOptions.querySelectorAll('button').forEach((button) => {
+    if (Number(button.dataset.value) === workoutState.config.daysPerWeek) {
+      button.classList.add('is-selected');
+    }
+    button.addEventListener('click', () => {
+      daysOptions.querySelectorAll('button').forEach((b) => b.classList.remove('is-selected'));
+      button.classList.add('is-selected');
+      workoutState.config.daysPerWeek = Number(button.dataset.value);
+    });
+  });
+}
+
+['division', 'volume', 'exerciseSource'].forEach((group) => {
+  const inputs = workoutForm?.querySelectorAll(`[name="${group}"]`);
+  inputs?.forEach((input) => {
+    if (input.value === workoutState.config[group]) {
+      input.checked = true;
+    }
+    input.addEventListener('change', () => {
+      workoutState.config[group] = input.value;
+      if (group === 'exerciseSource') {
+        updateRequirementSummary();
+      }
+    });
+  });
+});
 
 renderEvaluationsUI();
 
@@ -176,45 +301,8 @@ function updateTreinosPage() {
   const count = document.getElementById('selectedCountTreinos');
   if (count) count.textContent = selectedExercises.length;
 
-  const listContainer = document.getElementById('selectedExercisesList');
-  if (!listContainer) return;
-
-  if (selectedExercises.length === 0) {
-    listContainer.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🏋️</div>
-        <p style="font-size: 16px; font-weight: 500;">Nenhum exercício selecionado</p>
-        <p style="font-size: 14px; margin-top: 8px;">Vá para Exercícios e selecione alguns para montar seu treino</p>
-      </div>`;
-  } else {
-    const selectedData = exercises.filter((ex) =>
-      selectedExercises.includes(ex.id),
-    );
-    listContainer.innerHTML = `
-      <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Exercícios Selecionados</h3>
-      <div class="exercise-grid">
-        ${selectedData
-          .map((ex) => {
-            const diffClass = ex.difficulty
-              .toLowerCase()
-              .replace('á', 'a')
-              .replace('í', 'i');
-            return `
-            <div class="exercise-card">
-              <div class="exercise-header">
-                <div><h3 class="exercise-name">${ex.name}</h3></div>
-                <span class="exercise-badge badge-${diffClass}">${ex.difficulty}</span>
-              </div>
-              <p class="exercise-desc">${ex.desc}</p>
-              <div class="exercise-tags">
-                <span class="tag muscle">${ex.muscle}</span>
-                <span class="tag equipment">${ex.equipment}</span>
-              </div>
-            </div>`;
-          })
-          .join('')}
-      </div>`;
-  }
+  renderWorkoutCards();
+  updateRequirementSummary();
 }
 
 /* SELEÇÃO */
@@ -236,6 +324,7 @@ function updateSelectedCount() {
   count.textContent = `${selectedExercises.length} exercício${
     selectedExercises.length !== 1 ? 's' : ''
   } selecionado${selectedExercises.length !== 1 ? 's' : ''}`;
+  updateGraphRepresentations();
 }
 
 /* FILTROS / CONTROLE */
@@ -760,10 +849,31 @@ function loadEvaluationsFromStorage() {
   }
 }
 
-function saveActivePage(page) {
-  if (!VALID_PAGES.includes(page)) return;
+function loadWorkoutsFromStorage() {
   try {
-    localStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, page);
+    const raw = localStorage.getItem(WORKOUT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Não foi possível carregar os treinos.', error);
+    return [];
+  }
+}
+
+function saveWorkoutsToStorage(data) {
+  try {
+    localStorage.setItem(WORKOUT_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.warn('Não foi possível salvar os treinos.', error);
+  }
+}
+
+function saveActivePage(page) {
+  const normalized = typeof page === 'string' ? page.trim() : '';
+  if (!normalized) return;
+  try {
+    localStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, normalized);
   } catch (error) {
     console.warn('Não foi possível salvar a página ativa.', error);
   }
@@ -771,8 +881,8 @@ function saveActivePage(page) {
 
 function loadActivePage() {
   try {
-    const saved = localStorage.getItem(ACTIVE_PAGE_STORAGE_KEY);
-    if (saved && VALID_PAGES.includes(saved)) return saved;
+    const saved = (localStorage.getItem(ACTIVE_PAGE_STORAGE_KEY) || '').trim();
+    if (saved && document.getElementById(`page-${saved}`)) return saved;
   } catch (error) {
     console.warn('Não foi possível carregar a última página ativa.', error);
   }
@@ -936,6 +1046,7 @@ function applyImportedData(data = {}) {
   updateTreinosPage();
   populateProfileForm(profileData);
   renderEvaluationsUI();
+  updateGraphRepresentations();
 }
 
 function formatBytes(bytes) {
@@ -954,6 +1065,703 @@ function formatPercentage(value) {
   return `${value.toFixed(2)}%`;
 }
 
+/* ===================== WORKOUTS ===================== */
+
+function renderWorkoutCards() {
+  if (!workoutList) return;
+  if (workoutCountEl) workoutCountEl.textContent = workouts.length;
+
+  if (!workouts.length) {
+    workoutEmptyState?.style?.setProperty('display', 'flex');
+    workoutList.innerHTML = '';
+    workoutDetailsCard?.style?.setProperty('display', 'none');
+    return;
+  }
+
+  workoutEmptyState?.style?.setProperty('display', 'none');
+  workoutList.innerHTML = workouts
+    .map(
+      (workout) => `
+      <article class="workout-card" data-workout-id="${workout.id}">
+        <small>${new Date(workout.createdAt).toLocaleDateString('pt-BR')}</small>
+        <h4>${workout.name}</h4>
+        <p style="color: var(--muted); margin: 6px 0;">${workout.days.length} dia(s) • ${workout.config.division}</p>
+        <p style="font-size: 13px;">Volume semanal: ${workout.metrics.volumeTotal} séries</p>
+      </article>`,
+    )
+    .join('');
+}
+
+workoutList?.addEventListener('click', (event) => {
+  const card = event.target.closest('[data-workout-id]');
+  if (!card) return;
+  showWorkoutDetails(card.dataset.workoutId);
+});
+
+function openWorkoutModal() {
+  if (!workoutModal) return;
+  workoutState.furthestStep = 1;
+  workoutState.generationFinished = false;
+  workoutModal.classList.add('is-active');
+  workoutModal.setAttribute('aria-hidden', 'false');
+  document.body?.classList.add('modal-open');
+  goToWorkoutStep(1);
+  if (generationResult) generationResult.style.display = 'none';
+  generationProgress?.querySelectorAll('li').forEach((li) => li.classList.remove('is-complete'));
+  const bar = generationProgress?.querySelector('.progress-bar span');
+  if (bar) bar.style.width = '0%';
+  resetGenerationButton();
+  updateRequirementSummary();
+}
+
+function closeWorkoutModal() {
+  if (!workoutModal) return;
+  workoutModal.classList.remove('is-active');
+  workoutModal.setAttribute('aria-hidden', 'true');
+  document.body?.classList.remove('modal-open');
+}
+
+function goToWorkoutStep(step) {
+  if (step > workoutState.furthestStep) return;
+  workoutState.currentStep = Math.min(Math.max(step, 1), 3);
+  workoutStepElements.forEach((element) => {
+    element.classList.toggle('is-active', Number(element.dataset.step) === workoutState.currentStep);
+  });
+  stepDots.forEach((dot) => {
+    const target = Number(dot.dataset.stepTarget);
+    dot.classList.toggle('is-active', target === workoutState.currentStep);
+    dot.classList.toggle('is-complete', target < workoutState.currentStep);
+    dot.disabled = target > workoutState.furthestStep;
+  });
+}
+
+workoutForm?.addEventListener('click', (event) => {
+  const action = event.target.dataset.action;
+  if (!action) return;
+  event.preventDefault();
+
+  if (action === 'back') {
+    goToWorkoutStep(workoutState.currentStep - 1);
+    return;
+  }
+
+  if (action === 'next') {
+    if (
+      workoutState.currentStep === 2 &&
+      workoutState.config.exerciseSource === 'selected' &&
+      !requirementsMet()
+    ) {
+      requirementsHint.textContent =
+        'Selecione exercícios suficientes ou escolha a opção “Deixar o programa escolher”.';
+      return;
+    }
+    const nextStep = workoutState.currentStep + 1;
+    workoutState.furthestStep = Math.max(workoutState.furthestStep, nextStep);
+    goToWorkoutStep(nextStep);
+  }
+});
+
+stepDots.forEach((dot) => {
+  dot.addEventListener('click', () => {
+    if (dot.disabled) return;
+    goToWorkoutStep(Number(dot.dataset.stepTarget));
+  });
+});
+
+function updateRequirementSummary() {
+  if (!requirementsContainer) return;
+  const counts = countExercisesByCategory(selectedExercises);
+  const items = Object.keys(MIN_EXERCISES)
+    .map((category) => {
+      const current = counts[category] || 0;
+      const min = MIN_EXERCISES[category];
+      const status = current >= min ? 'ok' : current === 0 ? 'bad' : 'warn';
+      return `<div class="requirement-item ${status}"><span>${category}</span><span>${current}/${min}</span></div>`;
+    })
+    .join('');
+  requirementsContainer.innerHTML = items;
+
+  if (requirementsHint) {
+    requirementsHint.textContent = requirementsMet()
+      ? 'Todos os requisitos mínimos foram atendidos.'
+      : buildRequirementHint();
+  }
+}
+
+function buildRequirementHint() {
+  const details = Object.entries(MIN_EXERCISES)
+    .map(([category, min]) => `${category}: ${min}`)
+    .join(' • ');
+  return `Mantenha pelo menos ${details} ou permita que o Nushape complete para você.`;
+}
+
+function requirementsMet() {
+  const counts = countExercisesByCategory(selectedExercises);
+  return Object.entries(MIN_EXERCISES).every(
+    ([category, min]) => (counts[category] || 0) >= min,
+  );
+}
+
+function countExercisesByCategory(ids = []) {
+  const counts = {};
+  ids.forEach((exerciseId) => {
+    const exercise = exercises.find((ex) => ex.id === exerciseId);
+    if (!exercise) return;
+    const category = getMuscleCategory(exercise.muscle);
+    counts[category] = (counts[category] || 0) + 1;
+  });
+  return counts;
+}
+
+function getMuscleCategory(muscle = '') {
+  const norm = muscle.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (norm.includes('peito') || norm.includes('peitoral')) return 'Peitoral';
+  if (norm.includes('costa') || norm.includes('dorso')) return 'Costas';
+  if (norm.includes('perna') || norm.includes('posterior') || norm.includes('glute')) return 'Pernas';
+  if (norm.includes('ombro') || norm.includes('delto')) return 'Ombros';
+  if (norm.includes('bicep') || norm.includes('tricep') || norm.includes('antebraco') || norm.includes('braco')) {
+    return 'Braços';
+  }
+  return 'Outros';
+}
+
+function getExercisesByIds(ids = []) {
+  return exercises.filter((ex) => ids.includes(ex.id));
+}
+
+function ensureMinimumPool(pool = []) {
+  const counts = countExercisesByCategory(pool.map((ex) => ex.id));
+  const result = [...pool];
+  Object.entries(MIN_EXERCISES).forEach(([category, min]) => {
+    const current = counts[category] || 0;
+    if (current >= min) return;
+    const needed = min - current;
+    const candidates = exercises.filter(
+      (ex) =>
+        getMuscleCategory(ex.muscle) === category &&
+        !result.some((existing) => existing.id === ex.id),
+    );
+    result.push(...candidates.slice(0, needed));
+  });
+  return result;
+}
+
+function getDivisionTemplate(division, days) {
+  const templates = {
+    'Bro Split': [
+      { label: 'Dia A - Peitoral', muscles: ['Peitoral', 'Ombros'] },
+      { label: 'Dia B - Costas', muscles: ['Costas', 'Braços'] },
+      { label: 'Dia C - Pernas', muscles: ['Pernas'] },
+      { label: 'Dia D - Ombros', muscles: ['Ombros', 'Braços'] },
+      { label: 'Dia E - Braços', muscles: ['Braços'] },
+    ],
+    PPL: [
+      { label: 'Dia Push', muscles: ['Peitoral', 'Ombros', 'Braços'] },
+      { label: 'Dia Pull', muscles: ['Costas', 'Braços'] },
+      { label: 'Dia Legs', muscles: ['Pernas'] },
+    ],
+    'Upper Lower': [
+      { label: 'Dia Upper', muscles: ['Peitoral', 'Costas', 'Braços', 'Ombros'] },
+      { label: 'Dia Lower', muscles: ['Pernas'] },
+    ],
+    'PPL + UL': [
+      { label: 'Push', muscles: ['Peitoral', 'Ombros'] },
+      { label: 'Pull', muscles: ['Costas', 'Braços'] },
+      { label: 'Legs', muscles: ['Pernas'] },
+      { label: 'Upper', muscles: ['Peitoral', 'Ombros', 'Braços'] },
+      { label: 'Lower', muscles: ['Pernas'] },
+    ],
+    'Full Body': [{ label: 'Full Body', muscles: ['Peitoral', 'Costas', 'Pernas', 'Ombros', 'Braços'] }],
+    'Sem Preferência': [
+      { label: 'Peito + Ombro', muscles: ['Peitoral', 'Ombros'] },
+      { label: 'Costas + Braços', muscles: ['Costas', 'Braços'] },
+      { label: 'Pernas', muscles: ['Pernas'] },
+    ],
+  };
+
+  const base = templates[division] || templates['Sem Preferência'];
+  const output = [];
+  for (let i = 0; i < days; i += 1) {
+    output.push(base[i % base.length]);
+  }
+  return output.map((entry, index) => ({
+    label: entry.label || `Dia ${String.fromCharCode(65 + index)}`,
+    muscles: entry.muscles,
+  }));
+}
+
+const volumePresets = {
+  low: { exercisesPerMuscle: 1, prescription: '3x8-10', series: 3 },
+  medium: { exercisesPerMuscle: 2, prescription: '4x10-12', series: 4 },
+  high: { exercisesPerMuscle: 3, prescription: '5x12-15', series: 5 },
+  deload: { exercisesPerMuscle: 1, prescription: '2x8-10', series: 2 },
+};
+
+function pickExerciseFromPool(
+  pool,
+  targetMuscle,
+  usageTracker,
+  usedInDay,
+  lastExerciseId,
+  allowedCategories = [],
+) {
+  const category = getMuscleCategory(targetMuscle);
+  const byCategory = pool.filter((ex) => getMuscleCategory(ex.muscle) === category);
+  const allowedPool =
+    allowedCategories.length > 0
+      ? pool.filter((ex) => allowedCategories.includes(getMuscleCategory(ex.muscle)))
+      : pool;
+
+  const candidate =
+    findBestCandidate(byCategory, usageTracker, usedInDay, lastExerciseId) ||
+    findBestCandidate(allowedPool, usageTracker, usedInDay, lastExerciseId);
+
+  if (!candidate) return null;
+
+  usedInDay.add(candidate.id);
+  usageTracker.set(candidate.id, (usageTracker.get(candidate.id) || 0) + 1);
+  return candidate;
+}
+
+function findBestCandidate(dataset, usageTracker, usedInDay, lastExerciseId) {
+  if (!dataset.length) return null;
+  const sorted = [...dataset].sort(
+    (a, b) => (usageTracker.get(a.id) || 0) - (usageTracker.get(b.id) || 0),
+  );
+  for (const exercise of sorted) {
+    if (usedInDay.has(exercise.id)) continue;
+    if (exercise.id === lastExerciseId) continue;
+    return exercise;
+  }
+  for (const exercise of sorted) {
+    if (!usedInDay.has(exercise.id)) return exercise;
+  }
+  return null;
+}
+
+function generateWorkoutPlan(execTime = 0) {
+  const config = workoutState.config;
+  let pool =
+    config.exerciseSource === 'selected' ? getExercisesByIds(selectedExercises) : [];
+
+  if (config.exerciseSource === 'ai' || !pool.length) {
+    pool = [];
+  }
+
+  pool = ensureMinimumPool(pool);
+  if (!pool.length) {
+    pool = ensureMinimumPool(exercises.slice(0, 20));
+  }
+
+  const templates = getDivisionTemplate(config.division, config.daysPerWeek);
+  const volumePreset = volumePresets[config.volume] || volumePresets.medium;
+  const usageTracker = new Map();
+
+  const days = templates.map((template, index) => {
+    const usedInDay = new Set();
+    let lastExerciseId = null;
+    const allowedCategories = Array.from(
+      new Set(template.muscles.map((muscle) => getMuscleCategory(muscle))),
+    );
+    const exercisesForDay = [];
+    template.muscles.forEach((muscle) => {
+      for (let i = 0; i < volumePreset.exercisesPerMuscle; i += 1) {
+        const picked = pickExerciseFromPool(
+          pool,
+          muscle,
+          usageTracker,
+          usedInDay,
+          lastExerciseId,
+          allowedCategories,
+        );
+        if (picked) {
+          exercisesForDay.push({
+            id: picked.id,
+            name: picked.name,
+            muscle: picked.muscle,
+            equipment: picked.equipment,
+            prescription: volumePreset.prescription,
+          });
+          lastExerciseId = picked.id;
+        }
+      }
+    });
+
+    if (!exercisesForDay.length) {
+      const fallbackMuscles = allowedCategories.length
+        ? allowedCategories
+        : ['Peitoral', 'Costas', 'Braços', 'Ombros', 'Pernas'];
+      for (let i = 0; i < Math.min(2, fallbackMuscles.length); i += 1) {
+        const fallback = pickExerciseFromPool(
+          pool,
+          fallbackMuscles[i],
+          usageTracker,
+          usedInDay,
+          lastExerciseId,
+          allowedCategories,
+        );
+        if (fallback) {
+          exercisesForDay.push({
+            id: fallback.id,
+            name: fallback.name,
+            muscle: fallback.muscle,
+            equipment: fallback.equipment,
+            prescription: volumePreset.prescription,
+          });
+          lastExerciseId = fallback.id;
+        }
+      }
+    }
+
+    return {
+      label: template.label || `Dia ${String.fromCharCode(65 + index)}`,
+      focus: template.muscles.join(' / '),
+      exercises: exercisesForDay,
+    };
+  });
+
+  if (days.length > 1) {
+    for (let i = 1; i < days.length; i += 1) {
+      if (days[i].label === days[i - 1].label) {
+        days[i].label = `${days[i].label} • Variação`;
+      }
+    }
+    if (days[0].label === days[days.length - 1].label) {
+      days[days.length - 1].label = `${days[days.length - 1].label} • Extra`;
+    }
+  }
+
+  const equipmentSwitches = days.reduce(
+    (acc, day) => acc + calculateEquipmentSwitches(day.exercises),
+    0,
+  );
+  const volumeTotal = days.reduce(
+    (acc, day) => acc + day.exercises.length * volumePreset.series,
+    0,
+  );
+
+  return {
+    id: `${Date.now()}`,
+    name: `Treino ${workouts.length + 1}`,
+    createdAt: new Date().toISOString(),
+    config: { ...config },
+    days,
+    metrics: {
+      algorithm: 'Graph Planner v1',
+      timeMs: execTime,
+      equipmentSwitches,
+      volumeTotal,
+    },
+  };
+}
+
+function calculateEquipmentSwitches(exercisesList = []) {
+  if (!exercisesList.length) return 0;
+  let switches = 0;
+  for (let i = 1; i < exercisesList.length; i += 1) {
+    if (exercisesList[i].equipment !== exercisesList[i - 1].equipment) switches += 1;
+  }
+  return switches;
+}
+
+function showWorkoutDetails(id) {
+  if (!workoutDetailsCard) return;
+  const workout = workouts.find((w) => w.id === id);
+  if (!workout) return;
+  activeWorkoutId = workout.id;
+  workoutDetailsCard.dataset.currentWorkoutId = workout.id;
+  workoutDetailsCard.style.display = 'block';
+  workoutDetailsTitle.textContent = workout.name;
+  workoutDetailsMeta.textContent = `${workout.days.length} dia(s) • ${workout.config.division} • Volume total: ${workout.metrics.volumeTotal} séries`;
+  workoutDetailsBody.innerHTML = workout.days
+    .map(
+      (day, index) => `
+        <div class="workout-day" data-day-index="${index}">
+          <div class="workout-day-header">
+            <h4>${day.label}</h4>
+            <button type="button" class="icon-square-button" data-edit-day data-day-index="${index}" aria-label="Renomear ${day.label}">
+              <img src="assets/icons/botao-editar.png" alt="" width="18" height="18">
+            </button>
+          </div>
+          ${day.exercises
+            .map(
+              (exercise) => `
+                <div class="workout-exercise-row">
+                  <div>
+                    <strong>${exercise.name}</strong>
+                    <p style="font-size: 12px; color: var(--muted); margin: 2px 0 0;">${exercise.muscle} • ${exercise.equipment}</p>
+                  </div>
+                  <span>${exercise.prescription}</span>
+                </div>
+              `,
+            )
+            .join('')}
+        </div>
+      `,
+    )
+    .join('');
+  workoutDetailsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function handleWorkoutRename() {
+  if (!activeWorkoutId) return;
+  const workout = workouts.find((w) => w.id === activeWorkoutId);
+  if (!workout) return;
+  const newName = window.prompt('Digite o novo nome do treino:', workout.name);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === workout.name) return;
+  workout.name = trimmed;
+  saveWorkoutsToStorage(workouts);
+  renderWorkoutCards();
+  showWorkoutDetails(workout.id);
+}
+
+function handleWorkoutDayRename(dayIndex) {
+  if (!activeWorkoutId || Number.isNaN(dayIndex)) return;
+  const workout = workouts.find((w) => w.id === activeWorkoutId);
+  if (!workout || !Array.isArray(workout.days) || !workout.days[dayIndex]) return;
+  const currentLabel = workout.days[dayIndex].label || `Dia ${dayIndex + 1}`;
+  const newLabel = window.prompt('Digite o novo nome do dia:', currentLabel);
+  if (newLabel === null) return;
+  const trimmed = newLabel.trim();
+  if (!trimmed || trimmed === currentLabel) return;
+  workout.days[dayIndex].label = trimmed;
+  saveWorkoutsToStorage(workouts);
+  renderWorkoutCards();
+  showWorkoutDetails(workout.id);
+}
+
+function openDeleteWorkoutModal(workoutId) {
+  if (!deleteWorkoutModal || !workoutId) return;
+  workoutPendingDeletion = workoutId;
+  const workout = workouts.find((w) => w.id === workoutId);
+  if (deleteWorkoutName) {
+    deleteWorkoutName.textContent = workout ? workout.name : '';
+  }
+  deleteWorkoutModal.classList.add('is-active');
+  deleteWorkoutModal.setAttribute('aria-hidden', 'false');
+  document.body?.classList.add('modal-open');
+}
+
+function closeDeleteWorkoutModal() {
+  if (!deleteWorkoutModal) return;
+  workoutPendingDeletion = null;
+  deleteWorkoutModal.classList.remove('is-active');
+  deleteWorkoutModal.setAttribute('aria-hidden', 'true');
+  document.body?.classList.remove('modal-open');
+}
+
+function confirmWorkoutDeletion() {
+  if (!workoutPendingDeletion) return;
+  const targetId = workoutPendingDeletion;
+  const wasActive = activeWorkoutId === targetId;
+  workouts = workouts.filter((w) => w.id !== targetId);
+  saveWorkoutsToStorage(workouts);
+  renderWorkoutCards();
+
+  if (wasActive) {
+    activeWorkoutId = null;
+    if (workouts.length) {
+      showWorkoutDetails(workouts[0].id);
+    } else if (workoutDetailsCard) {
+      workoutDetailsCard.style.display = 'none';
+    }
+  } else if (activeWorkoutId) {
+    const stillExists = workouts.some((w) => w.id === activeWorkoutId);
+    if (stillExists) {
+      showWorkoutDetails(activeWorkoutId);
+    } else if (workouts.length) {
+      activeWorkoutId = null;
+      showWorkoutDetails(workouts[0].id);
+    } else if (workoutDetailsCard) {
+      workoutDetailsCard.style.display = 'none';
+    }
+  }
+
+  closeDeleteWorkoutModal();
+}
+
+generateWorkoutBtn?.addEventListener('click', () => {
+  if (workoutState.generationFinished) {
+    closeWorkoutModal();
+    return;
+  }
+  runWorkoutGeneration();
+});
+
+function runWorkoutGeneration() {
+  if (!generationProgress) return;
+  if (generationResult) generationResult.style.display = 'none';
+  const tasks = [...generationProgress.querySelectorAll('li')];
+  tasks.forEach((task) => task.classList.remove('is-complete'));
+  const bar = generationProgress.querySelector('.progress-bar span');
+  if (bar) bar.style.width = '0%';
+  if (generateWorkoutBtn) {
+    generateWorkoutBtn.disabled = true;
+    generateWorkoutBtn.textContent = 'Gerando...';
+    generateWorkoutBtn.classList.add('is-loading');
+  }
+
+  const start = performance.now();
+  tasks.forEach((task, index) => {
+    setTimeout(() => {
+      task.classList.add('is-complete');
+      if (bar) bar.style.width = `${((index + 1) / tasks.length) * 100}%`;
+    }, 400 * (index + 1));
+  });
+
+  setTimeout(() => {
+    const plan = generateWorkoutPlan(performance.now() - start);
+    workouts.push(plan);
+    saveWorkoutsToStorage(workouts);
+    renderWorkoutCards();
+    showWorkoutDetails(plan.id);
+    generationResult.innerHTML = `<strong>Treino gerado!</strong> Tempo: ${plan.metrics.timeMs.toFixed(
+      2,
+    )} ms • Volume total: ${plan.metrics.volumeTotal} séries • Trocas de equipamento: ${
+      plan.metrics.equipmentSwitches
+    }`;
+    generationResult.style.display = 'block';
+    markGenerationFinished();
+    if (generateWorkoutBtn) {
+      generateWorkoutBtn.disabled = false;
+      generateWorkoutBtn.classList.remove('is-loading');
+    }
+  }, 400 * tasks.length + 300);
+}
+
+function resetGenerationButton() {
+  if (!generateWorkoutBtn) return;
+  workoutState.generationFinished = false;
+  generateWorkoutBtn.disabled = false;
+  generateWorkoutBtn.textContent = 'Gerar treino';
+  generateWorkoutBtn.classList.remove('is-loading', 'is-finished');
+}
+
+function markGenerationFinished() {
+  if (!generateWorkoutBtn) return;
+  workoutState.generationFinished = true;
+  generateWorkoutBtn.textContent = 'Concluído';
+  generateWorkoutBtn.classList.add('is-finished');
+}
+
+/* ===================== GRAFOS ===================== */
+
+const recoveryDependencies = {
+  Costas: ['Bíceps', 'Antebraços'],
+  Peitoral: ['Tríceps', 'Ombros'],
+  Pernas: ['Glúteos', 'Panturrilhas'],
+  Ombros: ['Tríceps'],
+};
+
+function buildWorkoutGraph(selectedIds = []) {
+  if (!window.GraphRepresentation?.Graph) return null;
+  if (!selectedIds.length) return null;
+
+  const graph = new window.GraphRepresentation.Graph({ directed: true, weighted: true });
+  const selectedData = exercises.filter((ex) => selectedIds.includes(ex.id));
+  if (!selectedData.length) return null;
+
+  selectedData.forEach((exercise) => {
+    graph.addVertex(String(exercise.id), {
+      name: exercise.name,
+      muscle: exercise.muscle,
+      equipment: exercise.equipment,
+    });
+  });
+
+  for (let i = 0; i < selectedData.length; i += 1) {
+    for (let j = 0; j < selectedData.length; j += 1) {
+      if (i === j) continue;
+      const from = selectedData[i];
+      const to = selectedData[j];
+      const weight = calculateEdgeWeight(from, to);
+      if (Number.isFinite(weight)) {
+        graph.addEdge(String(from.id), String(to.id), weight);
+      }
+    }
+  }
+
+  return graph;
+}
+
+function calculateEdgeWeight(from, to) {
+  let cost = 1;
+  cost += from.equipment === to.equipment ? 1 : 4;
+  cost += from.muscle === to.muscle ? 1 : 2;
+
+  if (hasRecoveryDependency(from.muscle, to.muscle)) {
+    cost += 2;
+  }
+
+  return Math.max(1, Math.round(cost));
+}
+
+function hasRecoveryDependency(fromMuscle, toMuscle) {
+  const deps = recoveryDependencies[fromMuscle];
+  if (!deps) return false;
+  return deps.includes(toMuscle);
+}
+
+function updateGraphRepresentations() {
+  if (!document.getElementById('graphPanels')) return;
+  const graph = buildWorkoutGraph(selectedExercises);
+  renderGraphRepresentations(graph);
+}
+
+function renderGraphRepresentations(graph) {
+  const emptyState = document.getElementById('graphEmptyState');
+  const panels = document.getElementById('graphPanels');
+  const matrixTable = document.getElementById('adjacencyMatrixTable');
+  const listContainer = document.getElementById('adjacencyListContainer');
+
+  if (!emptyState || !panels || !matrixTable || !listContainer) return;
+
+  if (!graph || graph.vertices.size === 0) {
+    emptyState.style.display = 'flex';
+    panels.style.display = 'none';
+    matrixTable.innerHTML = '';
+    listContainer.innerHTML = '';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  panels.style.display = 'grid';
+
+  const { ids, matrix } = graph.toAdjacencyMatrix();
+  const headerCells = ids
+    .map((id) => `<th>${graph.vertices.get(id)?.name || id}</th>`)
+    .join('');
+  const header = `<tr><th>Exercício</th>${headerCells}</tr>`;
+  const rows = ids
+    .map((id, rowIndex) => {
+      const cells = matrix[rowIndex]
+        .map((value) => `<td>${value || ''}</td>`)
+        .join('');
+      return `<tr><th>${graph.vertices.get(id)?.name || id}</th>${cells}</tr>`;
+    })
+    .join('');
+  matrixTable.innerHTML = `<thead>${header}</thead><tbody>${rows}</tbody>`;
+
+  const adjacencyList = graph.toAdjacencyList();
+  listContainer.innerHTML = ids
+    .map((id) => {
+      const vertex = graph.vertices.get(id);
+      const neighbors = adjacencyList[id];
+      const chips = neighbors.length
+        ? neighbors
+            .map((neighbor) => {
+              const label = graph.vertices.get(neighbor.id)?.name || neighbor.id;
+              return `<span>${label} • ${neighbor.weight}</span>`;
+            })
+            .join('')
+        : '<span>Sem conexões</span>';
+      return `<div class="graph-list-item"><strong>${vertex?.name || id}</strong>${chips}</div>`;
+    })
+    .join('');
+}
+
 /* FUNÇÕES EXTRAS */
 
 function clearAllData() {
@@ -961,12 +1769,15 @@ function clearAllData() {
   selectedExercises = [];
   profileData = {};
   evaluations = [];
+  workouts = [];
 
   updateSelectedCount();
   render(exercises, null);
   updateTreinosPage();
   populateProfileForm({});
   renderEvaluationsUI();
+  renderWorkoutCards();
+  updateRequirementSummary();
   closeEvaluationModal();
   closeClearModal();
   closeExportModal();
@@ -1002,3 +1813,4 @@ render(exercises, null);
 updateSelectedCount();
 const initialPage = loadActivePage();
 navigateTo(initialPage);
+updateGraphRepresentations();
