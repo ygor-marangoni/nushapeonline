@@ -7,38 +7,53 @@
   <title>Nushape</title>
   <link rel="stylesheet" href="style.css">
   <link rel="shortcut icon" href="assets/favicon.svg" type="image/x-icon">
+  <script>
+    (function () {
+      window.__pendingNavigateQueue = [];
+      const fallbackNavigate = function (page) {
+        if (typeof window.__navigateHandler === 'function') {
+          window.__navigateHandler(page);
+        } else {
+          window.__pendingNavigateQueue.push(page);
+        }
+      };
+      window.navigateTo = window.navigateTo || fallbackNavigate;
+    })();
+  </script>
 </head>
 
 <body>
   <div class="header">
-    <div class="header-left">
-      <button class="menu-toggle" onclick="toggleMenu()">
-        <div class="hamburger">
-          <span></span><span></span><span></span>
+    <div class="header-content">
+      <div class="header-left">
+        <button class="menu-toggle" onclick="toggleMenu()">
+          <div class="hamburger">
+            <span></span><span></span><span></span>
+          </div>
+        </button>
+        <div class="logo" onclick="navigateTo('exercicios')">
+          <img src="assets/logo.svg" alt="Logo Nushape" style="height: 36px; vertical-align: middle;">
+          <span> — Seu treinador pessoal inteligente</span>
         </div>
+      </div>
+      <button class="export-btn">
+        <div style="position:relative; top: 1px;" class="icon">
+          <svg viewBox="0 0 14 15">
+            <line x1="5" y1="13" x2="5" y2="1"></line>
+            <polyline id="tick" points="1 9.5 5 13.5 13 5.5"></polyline>
+            <polyline id="normal" points="1 9.5 5 13.5 9 9.5"></polyline>
+          </svg>
+          <div>
+            <svg viewBox="0 0 24 24"></svg>
+          </div>
+        </div>
+        <ul>
+          <li style="position:relative; top: 1px;">Exportar dados</li>
+          <li>Carregando...</li>
+          <li>Sucesso!</li>
+        </ul>
       </button>
-      <div class="logo" onclick="navigateTo('exercicios')">
-        <img src="assets/logo.svg" alt="Logo Nushape" style="height: 36px; vertical-align: middle;">
-        <span> — Seu treinador pessoal inteligente</span>
-      </div>
     </div>
-    <button class="export-btn">
-      <div style="position:relative; top: 1px;" class="icon">
-        <svg viewBox="0 0 14 15">
-          <line x1="5" y1="13" x2="5" y2="1"></line>
-          <polyline id="tick" points="1 9.5 5 13.5 13 5.5"></polyline>
-          <polyline id="normal" points="1 9.5 5 13.5 9 9.5"></polyline>
-        </svg>
-        <div>
-          <svg viewBox="0 0 24 24"></svg>
-        </div>
-      </div>
-      <ul>
-        <li style="position:relative; top: 1px;">Exportar dados</li>
-        <li>Carregando...</li>
-        <li>Sucesso!</li>
-      </ul>
-    </button>
   </div>
 
   <div class=" sidebar-overlay" onclick="toggleMenu()">
@@ -55,9 +70,9 @@
           <span>📝</span><span>Meus Treinos</span>
         </button>
         <button class="sidebar-item" data-page="grafo" onclick="navigateTo('grafo')">
-          <span>❄️</span><span>Grafo dos Exercícios</span>
+          <img src="assets/icons/grafos.png" width="auto" alt=""> <span>Grafo dos Exercícios</span>
         </button>
-        <button class="sidebar-item" data-page="progresso" onclick="navigateTo('progresso')">
+        <button class=" sidebar-item" data-page="progresso" onclick="navigateTo('progresso')">
           <span>📊</span><span>Progresso</span>
         </button>
         <button class="sidebar-item" data-page="dados" onclick="navigateTo('dados')">
@@ -107,7 +122,7 @@
 
           <div class="search-controls">
             <div class="search-input-wrapper">
-              <span class="search-icon">🔎</span>
+              <img src="assets/icons/lupa.svg" class="search-icon">
               <label for="searchInput" class="sr-only">Buscar exercícios</label>
               <input type="text" class="search-input" id="searchInput" placeholder="Digite o nome do exercício..." oninput="search()">
             </div>
@@ -129,7 +144,7 @@
                 <option value="Trapézio">Trapézio</option>
                 <option value="Antebraços">Antebraços</option>
               </select>
-              <span class="select-arrow">▼</span>
+              <span class="select-arrow">➔</span>
             </div>
           </div>
 
@@ -214,7 +229,7 @@
         <div class="info-card">
           <div class="graph-card-header">
             <div>
-              <h2 class="search-title">Grafo dos Exercícios ❄️</h2>
+              <h2 class="search-title">Grafo dos Exercícios <img src="assets/icons/grafos.png" width="auto" alt="" height="18px" style="vertical-align: middle; margin-left: 4px;"></h2>
               <p style="color: var(--muted); margin-top: 8px; margin-bottom:16px;">Cada vértice representa um exercício selecionado e cada aresta indica o custo/direção de transição.</p>
             </div>
           </div>

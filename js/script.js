@@ -1,5 +1,7 @@
 /* Lógica de app / estado / UI */
 
+const supportsPointerEvents = 'PointerEvent' in window;
+
 let mode = 'sequential';
 let selectedExercises = [];
 const sorted = [...exercises].sort((a, b) =>
@@ -39,7 +41,9 @@ const importInput = document.getElementById('importInput');
 const importTrigger = document.querySelector('[data-import-button]');
 const deleteWorkoutModal = document.getElementById('deleteWorkoutModal');
 const deleteWorkoutName = document.getElementById('deleteWorkoutName');
-const confirmDeleteWorkoutBtn = document.getElementById('confirmDeleteWorkoutBtn');
+const confirmDeleteWorkoutBtn = document.getElementById(
+  'confirmDeleteWorkoutBtn',
+);
 const workoutModal = document.getElementById('workoutModal');
 const workoutForm = document.getElementById('workoutForm');
 const workoutList = document.getElementById('workoutList');
@@ -60,7 +64,9 @@ const generationProgress = document.getElementById('generationProgress');
 const generationResult = document.getElementById('generationResult');
 const stepDots = document.querySelectorAll('.step-dot');
 const workoutStepElements = document.querySelectorAll('.workout-step');
-const openWorkoutButtons = document.querySelectorAll('[data-open-workout-modal]');
+const openWorkoutButtons = document.querySelectorAll(
+  '[data-open-workout-modal]',
+);
 const closeWorkoutButtons = document.querySelectorAll('[data-close-workout]');
 
 const MIN_EXERCISES = {
@@ -90,6 +96,9 @@ let workoutPendingDeletion = null;
 const workoutDragState = {
   dayIndex: null,
   sourceIndex: null,
+  targetIndex: null,
+  pointerId: null,
+  hoveredRow: null,
 };
 
 /* EVENT BINDINGS PERFIL & AVALIAÇÃO */
@@ -154,7 +163,8 @@ document.addEventListener('keydown', (event) => {
   if (evaluationModal?.classList.contains('is-active')) closeEvaluationModal();
   if (clearDataModal?.classList.contains('is-active')) closeClearModal();
   if (exportModal?.classList.contains('is-active')) closeExportModal();
-  if (deleteWorkoutModal?.classList.contains('is-active')) closeDeleteWorkoutModal();
+  if (deleteWorkoutModal?.classList.contains('is-active'))
+    closeDeleteWorkoutModal();
 });
 
 document
@@ -173,7 +183,9 @@ if (downloadExportBtn) {
 
 document
   .querySelectorAll('[data-close-delete-workout]')
-  .forEach((button) => button.addEventListener('click', closeDeleteWorkoutModal));
+  .forEach((button) =>
+    button.addEventListener('click', closeDeleteWorkoutModal),
+  );
 
 if (deleteWorkoutModal) {
   deleteWorkoutModal.addEventListener('click', (event) => {
@@ -191,9 +203,23 @@ if (importTrigger && importInput) {
 }
 
 window.exportData = exportData;
+window.__navigateHandler = navigateTo;
+window.navigateTo = navigateTo;
+if (
+  Array.isArray(window.__pendingNavigateQueue) &&
+  window.__pendingNavigateQueue.length
+) {
+  const queued = [...window.__pendingNavigateQueue];
+  window.__pendingNavigateQueue.length = 0;
+  queued.forEach((page) => navigateTo(page));
+}
 
-openWorkoutButtons.forEach((btn) => btn.addEventListener('click', openWorkoutModal));
-closeWorkoutButtons.forEach((btn) => btn.addEventListener('click', closeWorkoutModal));
+openWorkoutButtons.forEach((btn) =>
+  btn.addEventListener('click', openWorkoutModal),
+);
+closeWorkoutButtons.forEach((btn) =>
+  btn.addEventListener('click', closeWorkoutModal),
+);
 workoutModal?.addEventListener('click', (event) => {
   if (event.target === workoutModal) closeWorkoutModal();
 });
@@ -203,8 +229,8 @@ if (closeDetailsBtn) {
   });
 }
 
-if (workoutDetailsCard) {
-  workoutDetailsCard.addEventListener('click', (event) => {
+  if (workoutDetailsCard) {
+    workoutDetailsCard.addEventListener('click', (event) => {
     const editWorkoutBtn = event.target.closest('[data-edit-workout]');
     if (editWorkoutBtn) {
       handleWorkoutRename();
@@ -221,23 +247,57 @@ if (workoutDetailsCard) {
       if (typeof dayIndex !== 'undefined') {
         handleWorkoutDayRename(Number(dayIndex));
       }
+      return;
+    }
+    const swapBtn = event.target.closest('[data-swap-up]');
+    if (swapBtn) {
+      const dayIndex = Number(swapBtn.dataset.dayIndex);
+      const exerciseIndex = Number(swapBtn.dataset.exerciseIndex);
+      handleExerciseSwapUp(dayIndex, exerciseIndex, swapBtn);
+      return;
     }
   });
 }
 
 if (workoutDetailsBody) {
-  const handlers = {
-    input: handleExerciseFieldInput,
-    change: handleExerciseFieldInput,
-    dragstart: handleExerciseDragStart,
-    dragover: handleExerciseDragOver,
-    dragleave: handleExerciseDragLeave,
-    drop: handleExerciseDrop,
-    dragend: handleExerciseDragEnd,
-  };
-  Object.entries(handlers).forEach(([eventName, handler]) => {
-    workoutDetailsBody.addEventListener(eventName, handler);
-  });
+  workoutDetailsBody.addEventListener('input', handleExerciseFieldInput);
+  workoutDetailsBody.addEventListener('change', handleExerciseFieldInput);
+  if (supportsPointerEvents) {
+    workoutDetailsBody.addEventListener(
+      'pointerdown',
+      handleExercisePointerDown,
+    );
+    workoutDetailsBody.addEventListener(
+      'pointermove',
+      handleExercisePointerMove,
+    );
+    workoutDetailsBody.addEventListener('pointerup', handleExercisePointerUp);
+    workoutDetailsBody.addEventListener(
+      'pointercancel',
+      handleExercisePointerCancel,
+    );
+    workoutDetailsBody.addEventListener(
+      'pointerleave',
+      handleExercisePointerCancel,
+    );
+  } else {
+    workoutDetailsBody.addEventListener(
+      'touchstart',
+      handleExerciseTouchStart,
+      { passive: false },
+    );
+    workoutDetailsBody.addEventListener('touchmove', handleExerciseTouchMove, {
+      passive: false,
+    });
+    workoutDetailsBody.addEventListener('touchend', handleExerciseTouchEnd);
+    workoutDetailsBody.addEventListener(
+      'touchcancel',
+      handleExerciseTouchCancel,
+    );
+    workoutDetailsBody.addEventListener('mousedown', handleExerciseMouseDown);
+    document.addEventListener('mousemove', handleExerciseMouseMove);
+    document.addEventListener('mouseup', handleExerciseMouseUp);
+  }
 }
 
 if (daysOptions) {
@@ -246,7 +306,9 @@ if (daysOptions) {
       button.classList.add('is-selected');
     }
     button.addEventListener('click', () => {
-      daysOptions.querySelectorAll('button').forEach((b) => b.classList.remove('is-selected'));
+      daysOptions
+        .querySelectorAll('button')
+        .forEach((b) => b.classList.remove('is-selected'));
       button.classList.add('is-selected');
       workoutState.config.daysPerWeek = Number(button.dataset.value);
     });
@@ -901,7 +963,9 @@ function normalizeWorkout(workout) {
 
 function normalizeWorkoutExercise(exercise = {}) {
   const parsed = parsePrescription(exercise.prescription);
-  const sets = Number.isFinite(exercise.sets) ? exercise.sets : parsed.sets || 3;
+  const sets = Number.isFinite(exercise.sets)
+    ? exercise.sets
+    : parsed.sets || 3;
   const reps = exercise.reps || parsed.reps || '10-12';
   return {
     ...exercise,
@@ -1096,7 +1160,9 @@ function applyImportedData(data = {}) {
     : [];
   profileData = data.profile || {};
   evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
-  workouts = Array.isArray(data.workouts) ? normalizeWorkoutCollection(data.workouts) : [];
+  workouts = Array.isArray(data.workouts)
+    ? normalizeWorkoutCollection(data.workouts)
+    : [];
 
   saveSelectedExercises();
   saveProfileToStorage(profileData);
@@ -1145,11 +1211,21 @@ function renderWorkoutCards() {
   workoutList.innerHTML = workouts
     .map(
       (workout) => `
-      <article class="workout-card" data-workout-id="${workout.id}" role="button" tabindex="0" aria-label="Abrir detalhes do ${workout.name}">
-        <small>${new Date(workout.createdAt).toLocaleDateString('pt-BR')}</small>
+      <article class="workout-card" data-workout-id="${
+        workout.id
+      }" role="button" tabindex="0" aria-label="Abrir detalhes do ${
+        workout.name
+      }">
+        <small>${new Date(workout.createdAt).toLocaleDateString(
+          'pt-BR',
+        )}</small>
         <h4>${workout.name}</h4>
-        <p style="color: var(--muted); margin: 6px 0;">${workout.days.length} dia(s) • ${workout.config.division}</p>
-        <p style="font-size: 13px;">Volume semanal: ${workout.metrics.volumeTotal} séries</p>
+        <p style="color: var(--muted); margin: 6px 0;">${
+          workout.days.length
+        } dia(s) • ${workout.config.division}</p>
+        <p style="font-size: 13px;">Volume semanal: ${
+          workout.metrics.volumeTotal
+        } séries</p>
       </article>`,
     )
     .join('');
@@ -1179,7 +1255,9 @@ function openWorkoutModal() {
   document.body?.classList.add('modal-open');
   goToWorkoutStep(1);
   if (generationResult) generationResult.style.display = 'none';
-  generationProgress?.querySelectorAll('li').forEach((li) => li.classList.remove('is-complete'));
+  generationProgress
+    ?.querySelectorAll('li')
+    .forEach((li) => li.classList.remove('is-complete'));
   const bar = generationProgress?.querySelector('.progress-bar span');
   if (bar) bar.style.width = '0%';
   resetGenerationButton();
@@ -1197,7 +1275,10 @@ function goToWorkoutStep(step) {
   if (step > workoutState.furthestStep) return;
   workoutState.currentStep = Math.min(Math.max(step, 1), 3);
   workoutStepElements.forEach((element) => {
-    element.classList.toggle('is-active', Number(element.dataset.step) === workoutState.currentStep);
+    element.classList.toggle(
+      'is-active',
+      Number(element.dataset.step) === workoutState.currentStep,
+    );
   });
   stepDots.forEach((dot) => {
     const target = Number(dot.dataset.stepTarget);
@@ -1286,12 +1367,25 @@ function countExercisesByCategory(ids = []) {
 }
 
 function getMuscleCategory(muscle = '') {
-  const norm = muscle.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const norm = muscle
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
   if (norm.includes('peito') || norm.includes('peitoral')) return 'Peitoral';
   if (norm.includes('costa') || norm.includes('dorso')) return 'Costas';
-  if (norm.includes('perna') || norm.includes('posterior') || norm.includes('glute')) return 'Pernas';
+  if (
+    norm.includes('perna') ||
+    norm.includes('posterior') ||
+    norm.includes('glute')
+  )
+    return 'Pernas';
   if (norm.includes('ombro') || norm.includes('delto')) return 'Ombros';
-  if (norm.includes('bicep') || norm.includes('tricep') || norm.includes('antebraco') || norm.includes('braco')) {
+  if (
+    norm.includes('bicep') ||
+    norm.includes('tricep') ||
+    norm.includes('antebraco') ||
+    norm.includes('braco')
+  ) {
     return 'Braços';
   }
   return 'Outros';
@@ -1333,7 +1427,10 @@ function getDivisionTemplate(division, days) {
       { label: 'Dia Legs', muscles: ['Pernas'] },
     ],
     'Upper Lower': [
-      { label: 'Dia Upper', muscles: ['Peitoral', 'Costas', 'Braços', 'Ombros'] },
+      {
+        label: 'Dia Upper',
+        muscles: ['Peitoral', 'Costas', 'Braços', 'Ombros'],
+      },
       { label: 'Dia Lower', muscles: ['Pernas'] },
     ],
     'PPL + UL': [
@@ -1343,7 +1440,12 @@ function getDivisionTemplate(division, days) {
       { label: 'Upper', muscles: ['Peitoral', 'Ombros', 'Braços'] },
       { label: 'Lower', muscles: ['Pernas'] },
     ],
-    'Full Body': [{ label: 'Full Body', muscles: ['Peitoral', 'Costas', 'Pernas', 'Ombros', 'Braços'] }],
+    'Full Body': [
+      {
+        label: 'Full Body',
+        muscles: ['Peitoral', 'Costas', 'Pernas', 'Ombros', 'Braços'],
+      },
+    ],
     'Sem Preferência': [
       { label: 'Peito + Ombro', muscles: ['Peitoral', 'Ombros'] },
       { label: 'Costas + Braços', muscles: ['Costas', 'Braços'] },
@@ -1378,10 +1480,14 @@ function pickExerciseFromPool(
   allowedCategories = [],
 ) {
   const category = getMuscleCategory(targetMuscle);
-  const byCategory = pool.filter((ex) => getMuscleCategory(ex.muscle) === category);
+  const byCategory = pool.filter(
+    (ex) => getMuscleCategory(ex.muscle) === category,
+  );
   const allowedPool =
     allowedCategories.length > 0
-      ? pool.filter((ex) => allowedCategories.includes(getMuscleCategory(ex.muscle)))
+      ? pool.filter((ex) =>
+          allowedCategories.includes(getMuscleCategory(ex.muscle)),
+        )
       : pool;
 
   const candidate =
@@ -1436,7 +1542,9 @@ function updateWorkoutMetrics(workout) {
 function generateWorkoutPlan(execTime = 0) {
   const config = workoutState.config;
   let pool =
-    config.exerciseSource === 'selected' ? getExercisesByIds(selectedExercises) : [];
+    config.exerciseSource === 'selected'
+      ? getExercisesByIds(selectedExercises)
+      : [];
 
   if (config.exerciseSource === 'ai' || !pool.length) {
     pool = [];
@@ -1540,7 +1648,10 @@ function generateWorkoutPlan(execTime = 0) {
   const volumeTotal = days.reduce(
     (acc, day) =>
       acc +
-      day.exercises.reduce((sum, exercise) => sum + (Number(exercise.sets) || volumePreset.sets), 0),
+      day.exercises.reduce(
+        (sum, exercise) => sum + (Number(exercise.sets) || volumePreset.sets),
+        0,
+      ),
     0,
   );
 
@@ -1564,12 +1675,14 @@ function calculateEquipmentSwitches(exercisesList = []) {
   if (!exercisesList.length) return 0;
   let switches = 0;
   for (let i = 1; i < exercisesList.length; i += 1) {
-    if (exercisesList[i].equipment !== exercisesList[i - 1].equipment) switches += 1;
+    if (exercisesList[i].equipment !== exercisesList[i - 1].equipment)
+      switches += 1;
   }
   return switches;
 }
 
-function showWorkoutDetails(id) {
+function showWorkoutDetails(id, options = {}) {
+  const { scrollIntoView: shouldScroll = true } = options;
   if (!workoutDetailsCard) return;
   const workout = workouts.find((w) => w.id === id);
   if (!workout) return;
@@ -1578,13 +1691,15 @@ function showWorkoutDetails(id) {
   workoutDetailsCard.style.display = 'block';
   workoutDetailsTitle.textContent = workout.name;
   workoutDetailsMeta.textContent = `${workout.days.length} dia(s) • ${workout.config.division} • Volume total: ${workout.metrics.volumeTotal} séries`;
-  workoutDetailsBody.innerHTML = workout.days
+  const workoutDaysMarkup = workout.days
     .map(
       (day, index) => `
         <div class="workout-day" data-day-index="${index}">
           <div class="workout-day-header">
             <h4>${day.label}</h4>
-            <button type="button" class="icon-square-button" data-edit-day data-day-index="${index}" aria-label="Renomear ${day.label}">
+            <button type="button" class="icon-square-button" data-edit-day data-day-index="${index}" aria-label="Renomear ${
+        day.label
+      }">
               <img src="assets/icons/botao-editar.png" alt="" width="18" height="18">
             </button>
           </div>
@@ -1597,26 +1712,36 @@ function showWorkoutDetails(id) {
                   data-day-index="${index}"
                   data-exercise-index="${exerciseIndex}"
                 >
-                  <button
-                    type="button"
-                    class="drag-handle"
-                    aria-label="Reordenar ${exercise.name}"
-                    tabindex="-1"
-                    draggable="true"
-                  >
-                    <span></span><span></span><span></span>
-                  </button>
+                  <div class="exercise-reorder">
+                    <span class="exercise-order-badge">${
+                      exerciseIndex + 1
+                    }°</span>
+                    <button
+                      type="button"
+                      class="reorder-btn"
+                      data-swap-up
+                      data-day-index="${index}"
+                      data-exercise-index="${exerciseIndex}"
+                      aria-label="Mover ${exercise.name} para cima"
+                      ${exerciseIndex === 0 ? 'disabled' : ''}
+                    >
+                      <span aria-hidden="true">⮂</span>
+                    </button>
+                  </div>
                   <div class="exercise-info">
                     <strong>${exercise.name}</strong>
-                    <p style="font-size: 12px; color: var(--muted); margin: 2px 0 0;">${exercise.muscle} • ${exercise.equipment}</p>
+                    <p style="font-size: 12px; color: var(--muted); margin: 2px 0 0;">${
+                      exercise.muscle
+                    } • ${exercise.equipment}</p>
                   </div>
                   <div class="exercise-controls">
                     <label class="exercise-field">
                       <span>Séries</span>
                       <input
                         type="number"
-                        min="1"
-                        max="30"
+                        min="0"
+                        max="50"
+                        step="1"
                         value="${Number(exercise.sets) || ''}"
                         data-exercise-set
                         data-day-index="${index}"
@@ -1629,6 +1754,7 @@ function showWorkoutDetails(id) {
                       <input
                         type="text"
                         inputmode="numeric"
+                        maxlength="7"
                         value="${exercise.reps || ''}"
                         data-exercise-reps
                         data-day-index="${index}"
@@ -1646,7 +1772,13 @@ function showWorkoutDetails(id) {
       `,
     )
     .join('');
-  workoutDetailsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  workoutDetailsBody.innerHTML = `
+    <p class="workout-drag-hint">Arraste os cards (desktop) ou toque em ⮂ (mobile) para reorganizar. Ajuste séries e reps diretamente nos campos.</p>
+    ${workoutDaysMarkup}
+  `;
+  if (shouldScroll) {
+    workoutDetailsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 function updateWorkoutDetailsMeta(workout) {
@@ -1666,22 +1798,29 @@ function handleExerciseFieldInput(event) {
 
   if (target.matches('[data-exercise-set]')) {
     let value = Number(target.value);
-    if (!Number.isFinite(value) || value < 1) value = 1;
-    if (value > 40) value = 40;
+    if (!Number.isFinite(value) || value < 0) value = 0;
+    if (value > 50) value = 50;
     exercise.sets = value;
     target.value = value;
   } else {
     let repsValue = target.value.replace(/[^0-9-]/g, '');
-    repsValue = repsValue.replace(/^-/, '');
+    repsValue = repsValue.replace(/^-+/, '');
     repsValue = repsValue.replace(/-{2,}/g, '-');
-    repsValue = repsValue.replace(/-$/, '');
-    repsValue = repsValue || exercise.reps || '10-12';
+    if (event.type === 'change') {
+      repsValue = repsValue.replace(/-$/, '');
+      if (!repsValue) {
+        repsValue = exercise.reps || '10-12';
+      }
+    }
+    repsValue = repsValue.slice(0, 7);
     exercise.reps = repsValue;
     target.value = repsValue;
   }
 
   exercise.prescription = formatExercisePrescription(exercise);
-  const label = target.closest('.exercise-controls')?.querySelector('[data-prescription-label]');
+  const label = target
+    .closest('.exercise-controls')
+    ?.querySelector('[data-prescription-label]');
   if (label) label.textContent = exercise.prescription;
 
   updateWorkoutMetrics(workout);
@@ -1690,62 +1829,231 @@ function handleExerciseFieldInput(event) {
   updateWorkoutDetailsMeta(workout);
 }
 
-function handleExerciseDragStart(event) {
-  if (!event.target.closest('.drag-handle')) {
-    event.preventDefault();
-    return;
-  }
-  const row = event.target.closest('[data-exercise-index]');
+function handleExercisePointerDown(event) {
+  if (!event.isPrimary || event.button === 2) return;
+  if (event.target.closest('input, textarea, select, button, label')) return;
+  const row = event.target.closest('.workout-exercise-row');
   if (!row) return;
+  event.preventDefault();
   workoutDragState.dayIndex = Number(row.dataset.dayIndex);
   workoutDragState.sourceIndex = Number(row.dataset.exerciseIndex);
+  workoutDragState.targetIndex = null;
+  workoutDragState.pointerId = event.pointerId;
+  workoutDragState.hoveredRow = null;
   row.classList.add('is-dragging');
-  event.dataTransfer?.setData('text/plain', '');
-  event.dataTransfer.effectAllowed = 'move';
+  row.setPointerCapture?.(event.pointerId);
 }
 
-function handleExerciseDragOver(event) {
-  const row = event.target.closest('[data-exercise-index]');
-  if (!row) return;
-  const dayIndex = Number(row.dataset.dayIndex);
+function handleExercisePointerMove(event) {
+  if (
+    !workoutDragState.pointerId ||
+    event.pointerId !== workoutDragState.pointerId
+  )
+    return;
+  event.preventDefault();
+  const hovered = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest('.workout-exercise-row');
+  if (!hovered) {
+    if (workoutDragState.hoveredRow) {
+      workoutDragState.hoveredRow.classList.remove('is-drop-target');
+      workoutDragState.hoveredRow = null;
+      workoutDragState.targetIndex = null;
+    }
+    return;
+  }
+  const dayIndex = Number(hovered.dataset.dayIndex);
   if (dayIndex !== workoutDragState.dayIndex) return;
+  if (workoutDragState.hoveredRow !== hovered) {
+    workoutDragState.hoveredRow?.classList.remove('is-drop-target');
+    hovered.classList.add('is-drop-target');
+    workoutDragState.hoveredRow = hovered;
+  }
+  workoutDragState.targetIndex = Number(hovered.dataset.exerciseIndex);
+}
+
+function handleExercisePointerUp(event) {
+  if (
+    !workoutDragState.pointerId ||
+    event.pointerId !== workoutDragState.pointerId
+  )
+    return;
   event.preventDefault();
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-  row.classList.add('is-drop-target');
+  finalizeWorkoutDrag(true);
 }
 
-function handleExerciseDragLeave(event) {
-  const row = event.target.closest('[data-exercise-index]');
-  if (!row) return;
-  row.classList.remove('is-drop-target');
+function handleExercisePointerCancel(event) {
+  if (
+    !workoutDragState.pointerId ||
+    event.pointerId !== workoutDragState.pointerId
+  )
+    return;
+  finalizeWorkoutDrag(false);
 }
 
-function handleExerciseDrop(event) {
-  const row = event.target.closest('[data-exercise-index]');
-  if (!row) return;
-  const targetIndex = Number(row.dataset.exerciseIndex);
-  const targetDayIndex = Number(row.dataset.dayIndex);
-  if (targetDayIndex !== workoutDragState.dayIndex) return;
-  event.preventDefault();
-  row.classList.remove('is-drop-target');
-  if (targetIndex === workoutDragState.sourceIndex) return;
-  reorderWorkoutExercises(targetDayIndex, workoutDragState.sourceIndex, targetIndex);
-  resetWorkoutDragState();
+function handleExerciseTouchStart(event) {
+  if (supportsPointerEvents) return;
+  if (event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  handleExercisePointerDown(
+    createPointerEventShim({
+      target: event.target,
+      pointerId: touch.identifier ?? 0,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
 }
 
-function handleExerciseDragEnd() {
-  document
-    .querySelectorAll('.workout-exercise-row.is-dragging, .workout-exercise-row.is-drop-target')
+function handleExerciseTouchMove(event) {
+  if (supportsPointerEvents || workoutDragState.pointerId === null) return;
+  const touch = findTouchByIdentifier(
+    event.touches,
+    workoutDragState.pointerId,
+  );
+  if (!touch) return;
+  handleExercisePointerMove(
+    createPointerEventShim({
+      target:
+        document.elementFromPoint(touch.clientX, touch.clientY) || event.target,
+      pointerId: workoutDragState.pointerId,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function handleExerciseTouchEnd(event) {
+  if (supportsPointerEvents || workoutDragState.pointerId === null) return;
+  const touch = findTouchByIdentifier(
+    event.changedTouches,
+    workoutDragState.pointerId,
+  );
+  if (!touch) return;
+  handleExercisePointerUp(
+    createPointerEventShim({
+      target: event.target,
+      pointerId: workoutDragState.pointerId,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function handleExerciseTouchCancel(event) {
+  if (supportsPointerEvents || workoutDragState.pointerId === null) return;
+  handleExercisePointerCancel(
+    createPointerEventShim({
+      target: event.target,
+      pointerId: workoutDragState.pointerId,
+      clientX: 0,
+      clientY: 0,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function handleExerciseMouseDown(event) {
+  if (supportsPointerEvents || event.button !== 0) return;
+  if (event.target.closest('input, textarea, select, button, label')) return;
+  handleExercisePointerDown(
+    createPointerEventShim({
+      target: event.target,
+      pointerId: 'mouse',
+      clientX: event.clientX,
+      clientY: event.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function handleExerciseMouseMove(event) {
+  if (supportsPointerEvents || workoutDragState.pointerId !== 'mouse') return;
+  handleExercisePointerMove(
+    createPointerEventShim({
+      target:
+        document.elementFromPoint(event.clientX, event.clientY) || event.target,
+      pointerId: 'mouse',
+      clientX: event.clientX,
+      clientY: event.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function handleExerciseMouseUp(event) {
+  if (supportsPointerEvents || workoutDragState.pointerId !== 'mouse') return;
+  handleExercisePointerUp(
+    createPointerEventShim({
+      target: event.target,
+      pointerId: 'mouse',
+      clientX: event.clientX,
+      clientY: event.clientY,
+      preventDefault: () => event.preventDefault(),
+    }),
+  );
+}
+
+function createPointerEventShim({
+  target,
+  pointerId,
+  clientX,
+  clientY,
+  preventDefault = () => {},
+}) {
+  return {
+    target,
+    pointerId,
+    clientX,
+    clientY,
+    preventDefault,
+    isPrimary: true,
+    button: 0,
+  };
+}
+
+function findTouchByIdentifier(touchList, identifier) {
+  if (!touchList) return null;
+  for (let i = 0; i < touchList.length; i += 1) {
+    if (touchList[i].identifier === identifier) return touchList[i];
+  }
+  return null;
+}
+
+function finalizeWorkoutDrag(apply) {
+  workoutDetailsBody
+    ?.querySelectorAll(
+      '.workout-exercise-row.is-dragging, .workout-exercise-row.is-drop-target',
+    )
     .forEach((row) => row.classList.remove('is-dragging', 'is-drop-target'));
+  if (
+    apply &&
+    workoutDragState.dayIndex !== null &&
+    workoutDragState.sourceIndex !== null &&
+    workoutDragState.targetIndex !== null &&
+    workoutDragState.sourceIndex !== workoutDragState.targetIndex
+  ) {
+    reorderWorkoutExercises(
+      workoutDragState.dayIndex,
+      workoutDragState.sourceIndex,
+      workoutDragState.targetIndex,
+    );
+  }
   resetWorkoutDragState();
 }
 
 function resetWorkoutDragState() {
   workoutDragState.dayIndex = null;
   workoutDragState.sourceIndex = null;
+  workoutDragState.targetIndex = null;
+  workoutDragState.pointerId = null;
+  workoutDragState.hoveredRow = null;
 }
 
-function reorderWorkoutExercises(dayIndex, fromIndex, toIndex) {
+function reorderWorkoutExercises(dayIndex, fromIndex, toIndex, options = {}) {
   if (!activeWorkoutId) return;
   const workout = workouts.find((w) => w.id === activeWorkoutId);
   if (!workout) return;
@@ -1759,12 +2067,44 @@ function reorderWorkoutExercises(dayIndex, fromIndex, toIndex) {
   ) {
     return;
   }
+  const { preserveScroll = false, anchorOffset } = options;
+  let initialOffset = null;
+  if (preserveScroll) {
+    if (typeof anchorOffset === 'number') {
+      initialOffset = anchorOffset;
+    } else {
+      const anchorRow = document.querySelector(
+        `.workout-exercise-row[data-day-index="${dayIndex}"][data-exercise-index="${fromIndex}"]`,
+      );
+      initialOffset = anchorRow?.getBoundingClientRect().top ?? null;
+    }
+  }
+
   const [moved] = exercises.splice(fromIndex, 1);
   exercises.splice(toIndex, 0, moved);
   updateWorkoutMetrics(workout);
   saveWorkoutsToStorage(workouts);
   renderWorkoutCards();
-  showWorkoutDetails(workout.id);
+  showWorkoutDetails(workout.id, { scrollIntoView: false });
+  if (preserveScroll && initialOffset !== null) {
+    const targetRow = document.querySelector(
+      `.workout-exercise-row[data-day-index="${dayIndex}"][data-exercise-index="${toIndex}"]`,
+    );
+    const newTop = targetRow?.getBoundingClientRect().top;
+    if (typeof newTop === 'number') {
+      window.scrollBy({ top: newTop - initialOffset, behavior: 'auto' });
+    }
+  }
+}
+
+function handleExerciseSwapUp(dayIndex, exerciseIndex, trigger) {
+  if (exerciseIndex <= 0) return;
+  const anchorRow = trigger?.closest('.workout-exercise-row');
+  const anchorOffset = anchorRow?.getBoundingClientRect().top ?? null;
+  reorderWorkoutExercises(dayIndex, exerciseIndex, exerciseIndex - 1, {
+    preserveScroll: true,
+    anchorOffset,
+  });
 }
 
 function handleWorkoutRename() {
@@ -1784,7 +2124,8 @@ function handleWorkoutRename() {
 function handleWorkoutDayRename(dayIndex) {
   if (!activeWorkoutId || Number.isNaN(dayIndex)) return;
   const workout = workouts.find((w) => w.id === activeWorkoutId);
-  if (!workout || !Array.isArray(workout.days) || !workout.days[dayIndex]) return;
+  if (!workout || !Array.isArray(workout.days) || !workout.days[dayIndex])
+    return;
   const currentLabel = workout.days[dayIndex].label || `Dia ${dayIndex + 1}`;
   const newLabel = window.prompt('Digite o novo nome do dia:', currentLabel);
   if (newLabel === null) return;
@@ -1883,9 +2224,9 @@ function runWorkoutGeneration() {
     showWorkoutDetails(plan.id);
     generationResult.innerHTML = `<strong>Treino gerado!</strong> Tempo: ${plan.metrics.timeMs.toFixed(
       2,
-    )} ms • Volume total: ${plan.metrics.volumeTotal} séries • Trocas de equipamento: ${
-      plan.metrics.equipmentSwitches
-    }`;
+    )} ms • Volume total: ${
+      plan.metrics.volumeTotal
+    } séries • Trocas de equipamento: ${plan.metrics.equipmentSwitches}`;
     generationResult.style.display = 'block';
     markGenerationFinished();
     if (generateWorkoutBtn) {
@@ -1923,7 +2264,10 @@ function buildWorkoutGraph(selectedIds = []) {
   if (!window.GraphRepresentation?.Graph) return null;
   if (!selectedIds.length) return null;
 
-  const graph = new window.GraphRepresentation.Graph({ directed: true, weighted: true });
+  const graph = new window.GraphRepresentation.Graph({
+    directed: true,
+    weighted: true,
+  });
   const selectedData = exercises.filter((ex) => selectedIds.includes(ex.id));
   if (!selectedData.length) return null;
 
@@ -2016,12 +2360,15 @@ function renderGraphRepresentations(graph) {
       const chips = neighbors.length
         ? neighbors
             .map((neighbor) => {
-              const label = graph.vertices.get(neighbor.id)?.name || neighbor.id;
+              const label =
+                graph.vertices.get(neighbor.id)?.name || neighbor.id;
               return `<span>${label} • ${neighbor.weight}</span>`;
             })
             .join('')
         : '<span>Sem conexões</span>';
-      return `<div class="graph-list-item"><strong>${vertex?.name || id}</strong>${chips}</div>`;
+      return `<div class="graph-list-item"><strong>${
+        vertex?.name || id
+      }</strong>${chips}</div>`;
     })
     .join('');
 }
