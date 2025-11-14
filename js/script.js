@@ -229,8 +229,8 @@ if (closeDetailsBtn) {
   });
 }
 
-  if (workoutDetailsCard) {
-    workoutDetailsCard.addEventListener('click', (event) => {
+if (workoutDetailsCard) {
+  workoutDetailsCard.addEventListener('click', (event) => {
     const editWorkoutBtn = event.target.closest('[data-edit-workout]');
     if (editWorkoutBtn) {
       handleWorkoutRename();
@@ -1725,7 +1725,7 @@ function showWorkoutDetails(id, options = {}) {
                       aria-label="Mover ${exercise.name} para cima"
                       ${exerciseIndex === 0 ? 'disabled' : ''}
                     >
-                      <span aria-hidden="true">⮂</span>
+                      <img src="assets/icons/reordenar.svg" alt="" width="16" height="16">
                     </button>
                   </div>
                   <div class="exercise-info">
