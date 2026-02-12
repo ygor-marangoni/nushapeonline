@@ -609,14 +609,6 @@ const exercises = [
     desc: 'Caminhada carregando cargas pesadas para pegada e core.',
   },
   {
-    id: 77,
-    name: 'Kettlebell Swing',
-    muscle: 'Pernas',
-    equipment: 'Kettlebell',
-    difficulty: 'Intermediário',
-    desc: 'Hinge explosivo para glúteos e condicionamento.',
-  },
-  {
     id: 78,
     name: 'Clean and Press (técnico)',
     muscle: 'Total',
@@ -751,14 +743,6 @@ const exercises = [
     equipment: 'Halteres',
     difficulty: 'Intermediário',
     desc: 'Passadas caminhando contínuas.',
-  },
-  {
-    id: 95,
-    name: 'Pistol Squat (assistido)',
-    muscle: 'Pernas',
-    equipment: 'Peso corporal',
-    difficulty: 'Avançado',
-    desc: 'Agachamento unilateral profundo com controle.',
   },
   {
     id: 96,

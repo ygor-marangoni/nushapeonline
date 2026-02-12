@@ -31,28 +31,14 @@
             <span></span><span></span><span></span>
           </div>
         </button>
-        <div class="logo" onclick="navigateTo('exercicios')">
+        <div class="logo" onclick="navigateTo('dashboard')">
           <img src="assets/logo.svg" alt="Logo Nushape" style="height: 36px; vertical-align: middle;">
           <span> — Seu treinador pessoal inteligente</span>
         </div>
       </div>
-      <button class="export-btn">
-        <div style="position:relative; top: 1px;" class="icon">
-          <svg viewBox="0 0 14 15">
-            <line x1="5" y1="13" x2="5" y2="1"></line>
-            <polyline id="tick" points="1 9.5 5 13.5 13 5.5"></polyline>
-            <polyline id="normal" points="1 9.5 5 13.5 9 9.5"></polyline>
-          </svg>
-          <div>
-            <svg viewBox="0 0 24 24"></svg>
-          </div>
-        </div>
-        <ul>
-          <li style="position:relative; top: 1px;">Exportar dados</li>
-          <li>Carregando...</li>
-          <li>Sucesso!</li>
-        </ul>
-      </button>
+      <div class="header-actions">
+        <button type="button" class="button-secondary" id="authTrigger">Entrar</button>
+      </div>
     </div>
   </div>
 
@@ -63,73 +49,387 @@
     <aside class="sidebar">
       <div class="filter-section">
         <div class="filter-title">NAVEGAÇÃO</div>
-        <button class="sidebar-item" data-page="exercicios" onclick="navigateTo('exercicios')">
-          <span>🏋️</span><span>Exercícios</span>
+
+        <button class="sidebar-item active" data-page="dashboard" onclick="navigateTo('dashboard')">
+          <span>🏠</span><span>Dashboard</span>
         </button>
         <button class="sidebar-item" data-page="treinos" onclick="navigateTo('treinos')">
           <span>📝</span><span>Meus Treinos</span>
         </button>
-        <button class="sidebar-item" data-page="grafo" onclick="navigateTo('grafo')">
-          <img src="assets/icons/grafos.png" width="auto" alt=""> <span>Grafo dos Exercícios</span>
+        <button class="sidebar-item" data-page="exercicios" onclick="navigateTo('exercicios')">
+          <span>🏋️</span><span>Exercícios</span>
         </button>
         <button class=" sidebar-item" data-page="progresso" onclick="navigateTo('progresso')">
           <span>📊</span><span>Progresso</span>
         </button>
+        <button class="sidebar-item" data-page="sessao" onclick="navigateTo('sessao')">
+          <span>⚡</span><span>Sessão do Dia</span>
+        </button>
+        <button class="sidebar-item" data-page="biblioteca" onclick="navigateTo('biblioteca')">
+          <span>📖</span><span>Biblioteca de Treinos</span>
+        </button>
         <button class="sidebar-item" data-page="dados" onclick="navigateTo('dados')">
           <span>👤</span><span>Meus Dados</span>
         </button>
-        <button class="sidebar-item" disabled><span>📅 </span><span>Calendário de Treinos</span></button>
-        <button class="sidebar-item" disabled><span>⚡</span><span> Sessão do Dia</span></button>
-        <button class="sidebar-item" disabled><span>🏆</span><span> Metas e Conquistas</span></button>
-        <button class="sidebar-item" disabled><span>📖</span><span> Biblioteca de Treinos </span></button>
       </div>
 
-      <div class="filter-section fases">
-        <button class="export-btn-mobile">
-          <div class="icon">
-            <svg viewBox="0 0 14 15">
-              <line x1="5" y1="13" x2="5" y2="1"></line>
-              <polyline id="tick" points="1 9.5 5 13.5 13 5.5"></polyline>
-              <polyline id="normal" points="1 9.5 5 13.5 9 9.5"></polyline>
-            </svg>
-            <div>
-              <svg viewBox="0 0 24 24"></svg>
-            </div>
-          </div>
-          <ul>
-            <li>Exportar dados</li>
-            <li>Carregando...</li>
-            <li>Sucesso!</li>
-          </ul>
-        </button>
-      </div>
+      <div class="filter-section fases"></div>
 
     </aside>
 
     <main id="mainContent" class="main" tabindex="-1">
+      <!-- PÁGINA: LOGIN -->
+      <div id="page-login" class="page auth-page">
+        <div class="auth-shell">
+          <header class="auth-header">
+            <div class="auth-logo">
+              <img src="assets/logo.svg" alt="Logo Nushape">
+              <span>— Seu treinador pessoal inteligente</span>
+            </div>
+          </header>
+
+          <main class="auth-main">
+            <div class="auth-card">
+              <div id="loginView" class="auth-view active" aria-hidden="false">
+                <h2>Entrar no sistema</h2>
+                <p>Insira as suas credenciais para continuar a sua evolução.</p>
+
+                <form id="loginForm" class="auth-form">
+                  <div class="auth-group">
+                    <label for="login-email" class="auth-label">E-mail</label>
+                    <div class="auth-input">
+                      <span class="auth-icon">✉️</span>
+                      <input type="email" id="login-email" required placeholder="exemplo@email.com" class="auth-field">
+                    </div>
+                  </div>
+
+                  <div class="auth-group">
+                    <div class="auth-row">
+                      <label for="login-password" class="auth-label">Senha</label>
+                      <button type="button" class="auth-link" data-auth-reset>Esqueceu a senha?</button>
+                    </div>
+                    <div class="auth-input">
+                      <span class="auth-icon">🔒</span>
+                      <input type="password" id="login-password" required placeholder="Sua senha" class="auth-field">
+                      <button type="button" class="auth-toggle" data-toggle-password aria-label="Mostrar senha">👁️</button>
+                    </div>
+                  </div>
+
+                  <button type="submit" class="auth-submit">
+                    <span class="auth-submit-text">Entrar</span>
+                    <span class="auth-spinner" aria-hidden="true"></span>
+                  </button>
+                </form>
+
+                <div class="auth-switch">
+                  Novo no Nushape?
+                  <button type="button" class="auth-link" data-auth-switch="register">Criar conta agora</button>
+                </div>
+              </div>
+
+              <div id="registerView" class="auth-view" aria-hidden="true">
+                <h2>Criar sua conta</h2>
+                <p>Comece hoje o seu plano de treino personalizado.</p>
+
+                <form id="registerForm" class="auth-form">
+                  <div class="auth-group">
+                    <label for="reg-name" class="auth-label">Nome completo</label>
+                    <div class="auth-input">
+                      <span class="auth-icon">👤</span>
+                      <input type="text" id="reg-name" required placeholder="Como devemos chamar você?" class="auth-field">
+                    </div>
+                  </div>
+
+                  <div class="auth-group">
+                    <label for="reg-email" class="auth-label">E-mail</label>
+                    <div class="auth-input">
+                      <span class="auth-icon">✉️</span>
+                      <input type="email" id="reg-email" required placeholder="seu@email.com" class="auth-field">
+                    </div>
+                  </div>
+
+                  <div class="auth-group">
+                    <label for="reg-password" class="auth-label">Escolha uma senha</label>
+                    <div class="auth-input">
+                      <span class="auth-icon">🔒</span>
+                      <input type="password" id="reg-password" required placeholder="Mínimo 8 caracteres" class="auth-field">
+                      <button type="button" class="auth-toggle" data-toggle-password aria-label="Mostrar senha">👁️</button>
+                    </div>
+                  </div>
+
+                  <div class="auth-group">
+                    <label for="reg-confirm" class="auth-label">Confirmar senha</label>
+                    <div class="auth-input">
+                      <span class="auth-icon">✅</span>
+                      <input type="password" id="reg-confirm" required placeholder="Repita a senha" class="auth-field">
+                      <button type="button" class="auth-toggle" data-toggle-password aria-label="Mostrar senha">👁️</button>
+                    </div>
+                  </div>
+
+                  <button type="submit" class="auth-submit">
+                    <span class="auth-submit-text">Começar evolução</span>
+                    <span class="auth-spinner" aria-hidden="true"></span>
+                  </button>
+                </form>
+
+                <div class="auth-switch">
+                  Já tem uma conta?
+                  <button type="button" class="auth-link" data-auth-switch="login">Fazer login</button>
+                </div>
+              </div>
+
+              <div id="confirmView" class="auth-view" aria-hidden="true">
+                <h2>Confirme seu e-mail</h2>
+                <p>Enviamos um link de confirmação para <strong id="confirmEmail">seu e-mail</strong>. Clique no link para ativar sua conta e fazer login.</p>
+
+                <div class="auth-confirm-actions">
+                  <button type="button" class="auth-submit" data-auth-switch="login">
+                    <span class="auth-submit-text">Ir para login</span>
+                    <span class="auth-spinner" aria-hidden="true"></span>
+                  </button>
+                  <button type="button" class="auth-link auth-resend" data-auth-resend>
+                    Reenviar email de confirmação
+                  </button>
+                </div>
+              </div>
+
+              <span id="authFeedback" class="auth-feedback" role="status"></span>
+            </div>
+
+            <div class="auth-security">
+              <span>🔐 Dados protegidos por criptografia de ponta</span>
+            </div>
+          </main>
+
+          <footer class="auth-footer">
+            &copy; <span id="authYear"></span> Nushape — Inteligência aplicada ao treinamento físico.
+          </footer>
+        </div>
+      </div>
+      <!-- PÁGINA: DASHBOARD -->
+      <div id="page-dashboard" class="page active">
+        <div class="info-card">
+          <div class="page-header">
+            <div>
+              <h2 class="search-title" id="dashboardGreeting">Dashboard</h2>
+              <p id="dashboardSubtext">Seu resumo rápido de treinos, avaliações e próximos passos.</p>
+            </div>
+            <div class="page-header-actions">
+              <button class="button-primary btn-create-workout dashboard-card-btn" data-open-workout-modal>
+                Montar treino
+                <span class="icon">+</span>
+              </button>
+              <button type="button" class="button-secondary explorar" onclick="navigateTo('exercicios')">Explorar exercícios</button>
+            </div>
+          </div>
+
+          <div class="stats-grid" id="dashboardStats">
+            <div class="stat-card">
+              <h3>Treinos salvos</h3>
+              <div class="value" id="dashWorkoutsCount">0</div>
+            </div>
+            <div class="stat-card">
+              <h3>Exercícios selecionados</h3>
+              <div class="value" id="dashSelectedCount">0</div>
+            </div>
+            <div class="stat-card">
+              <h3>Avaliações físicas</h3>
+              <div class="value" id="dashEvaluationCount">0</div>
+            </div>
+            <div class="stat-card">
+              <h3>Séries no último treino</h3>
+              <div class="value" id="dashLastVolume">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-bento">
+          <section class="progress-card dashboard-card chart-card">
+            <div class="progress-card-header">
+              <div>
+                <h3>Evolução física</h3>
+                <p>Peso e % gordura ao longo do tempo.</p>
+              </div>
+              <span class="chip chip-soon">Histórico</span>
+            </div>
+            <div id="dashboardChartEmpty" class="empty-state small" style="display:none;">
+              <div class="empty-icon">📉</div>
+              <p style="font-size:15px; font-weight:500;">Sem avaliações registradas</p>
+              <p style="font-size:13px; color:var(--muted); margin-top:6px;">Registre sua avaliação para ver o gráfico.</p>
+            </div>
+            <div class="chart-area" id="dashboardChartArea">
+              <canvas id="dashboardChart" height="260"></canvas>
+            </div>
+          </section>
+          <section class="progress-card dashboard-card steps-card">
+            <div class="progress-card-header">
+              <div>
+                <h3>Próximos passos</h3>
+                <p>Melhore seu plano com estas ações rápidas.</p>
+              </div>
+              <span class="chip chip-soon">Sugestões</span>
+            </div>
+            <ul class="dashboard-list" id="dashboardNextSteps"></ul>
+          </section>
+          <section class="progress-card dashboard-card">
+            <div class="progress-card-header">
+              <div>
+                <h3>Última avaliação</h3>
+                <p>Acompanhe medidas e evolução.</p>
+              </div>
+              <button type="button" class="button-primary button-primary--sm" data-open-evaluation>
+                Nova avaliação
+                <span class="button-icon">+</span>
+              </button>
+            </div>
+            <div id="dashboardEvaluationEmpty" class="empty-state small" style="display:none;">
+              <div class="empty-icon">📈</div>
+              <p style="font-size:15px; font-weight:500;">Nenhuma avaliação registrada</p>
+              <p style="font-size:13px; color:var(--muted); margin-top:6px;">Crie uma avaliação para acompanhar seu shape.</p>
+            </div>
+            <div id="dashboardEvaluationSummary" class="last-eval-grid"></div>
+          </section>
+
+
+        </div>
+
+        <div class="dashboard-bento-bottom">
+          <section class="progress-card dashboard-card">
+            <div class="progress-card-header">
+              <div>
+                <h3>Último treino criado</h3>
+                <p>Resumo do treino mais recente para você retomar rápido.</p>
+              </div>
+              <button type="button" class="button-secondary" onclick="navigateTo('treinos')">Ver treinos</button>
+            </div>
+            <div id="dashboardLastWorkoutEmpty" class="empty-state small" style="display:none;">
+              <div class="empty-icon">🧩</div>
+              <p style="font-size:15px; font-weight:500;">Nenhum treino criado ainda</p>
+              <p style="font-size:13px; color:var(--muted); margin-top:6px;">Monte seu primeiro treino para ver o resumo aqui.</p>
+            </div>
+            <div id="dashboardLastWorkout"></div>
+          </section>
+          <section class="progress-card dashboard-card profile-card">
+            <div class="progress-card-header">
+              <div>
+                <h3>Resumo do perfil</h3>
+                <p>Seus dados pessoais usados para personalização.</p>
+              </div>
+              <button type="button" class="button-secondary" onclick="navigateTo('dados')">Editar dados</button>
+            </div>
+            <div id="dashboardProfileSummary" class="last-eval-grid"></div>
+          </section>
+
+        </div>
+      </div>
+
+      <!-- PÁGINA: SESSÃO DO DIA -->
+      <div id="page-sessao" class="page">
+        <div class="info-card">
+          <div class="page-header">
+            <div>
+              <h2 class="search-title">Sessão do Dia ⚡</h2>
+              <p>Escolha o treino e registre carga e repetições para acompanhar sua evolução.</p>
+            </div>
+            <div class="page-header-actions">
+              <button type="button" class="button-secondary" onclick="navigateTo('treinos')">Ver treinos</button>
+            </div>
+          </div>
+
+          <div class="form-section session-config">
+            <h3>Configurar sessão</h3>
+            <div class="form-grid">
+              <label class="form-field">
+                <span>Treino</span>
+                <select id="sessionWorkoutSelect"></select>
+              </label>
+              <label class="form-field">
+                <span>Dia</span>
+                <select id="sessionDaySelect"></select>
+              </label>
+              <label class="form-field">
+                <span>Data</span>
+                <input type="date" id="sessionDateInput">
+              </label>
+            </div>
+            <p id="sessionSummary" class="session-summary"></p>
+          </div>
+        </div>
+
+        <div class="info-card" style="margin-top: 28px;">
+          <div id="sessionEmpty" class="empty-state small" style="display:none;">
+            <div class="empty-icon">🧩</div>
+            <p style="font-size:15px; font-weight:500;">Nenhum treino disponível</p>
+            <p style="font-size:13px; color:var(--muted); margin-top:6px;">Crie um treino para começar a registrar suas sessões.</p>
+          </div>
+          <div id="sessionContent">
+            <div id="sessionExercises" class="session-exercises"></div>
+            <div class="workout-step-actions">
+              <span></span>
+              <button type="button" class="button-primary" id="saveSessionBtn">Salvar sessão</button>
+            </div>
+            <div id="sessionFeedback" class="form-feedback" role="status"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PÁGINA: BIBLIOTECA DE TREINOS -->
+      <div id="page-biblioteca" class="page">
+        <div class="info-card">
+          <div class="page-header">
+            <div>
+              <h2 class="search-title">Biblioteca de Treinos 🏆</h2>
+              <p>Treinos inspirados em atletas do fisiculturismo mundial e brasileiro.</p>
+            </div>
+            <div class="page-header-actions">
+              <button type="button" class="button-secondary" onclick="navigateTo('treinos')">Ir para meus treinos</button>
+            </div>
+          </div>
+
+          <div class="library-controls">
+            <div class="search-input-wrapper">
+              <img src="assets/icons/lupa.svg" class="search-icon">
+              <label for="librarySearch" class="sr-only">Buscar treinos</label>
+              <input type="text" class="search-input" id="librarySearch" placeholder="Buscar atleta, foco ou divisão...">
+            </div>
+            <div class="pill-options" id="libraryFilters">
+              <button type="button" data-filter="all" class="is-selected">Todos</button>
+              <button type="button" data-filter="world">Mundial</button>
+              <button type="button" data-filter="br">Brasil</button>
+              <button type="button" data-filter="special">Especialização</button>
+            </div>
+          </div>
+
+          <div class="library-featured" id="libraryFeatured"></div>
+        </div>
+
+        <div class="info-card">
+          <div class="library-grid" id="libraryGrid"></div>
+          <div id="libraryEmpty" class="empty-state small" style="display:none;">
+            <div class="empty-icon">📚</div>
+            <p style="font-size:15px; font-weight:500;">Nenhum treino encontrado</p>
+            <p style="font-size:13px; color:var(--muted); margin-top:6px;">Tente ajustar a busca ou os filtros.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- PÁGINA: EXERCÍCIOS -->
-      <div id="page-exercicios" class="page active">
+      <div id="page-exercicios" class="page">
         <div class="search-card">
           <div class="search-header">
             <h2 class="search-title">Buscar Exercícios</h2>
-          </div>
-
-          <div class="tabs">
-            <button class="tab active" onclick="switchMode('sequential')">🔍 Busca Simples</button>
-            <button class="tab" onclick="switchMode('binary')">⚡ Busca Rápida</button>
-            <button class="tab" onclick="switchMode('text')">📝 Busca em Texto</button>
           </div>
 
           <div class="search-controls">
             <div class="search-input-wrapper">
               <img src="assets/icons/lupa.svg" class="search-icon">
               <label for="searchInput" class="sr-only">Buscar exercícios</label>
-              <input type="text" class="search-input" id="searchInput" placeholder="Digite o nome do exercício..." oninput="search()">
+              <input type="text" class="search-input" id="searchInput" placeholder="Digite o nome do exercício...">
             </div>
 
             <div class="select-wrapper">
               <label for="muscleSelect" class="sr-only">Filtrar por grupo muscular</label>
-              <select class="custom-select" id="muscleSelect" onchange="search()">
+              <select class="custom-select" id="muscleSelect">
                 <option value="Todos">Todos os Grupos</option>
                 <option value="Peitoral">Peitoral</option>
                 <option value="Costas">Costas</option>
@@ -168,7 +468,7 @@
             <div>
               <p class="cta-kicker">Assistente Inteligente</p>
               <h2>Monte treinos personalizados automaticamente</h2>
-              <p>Defina seus parâmetros e o Nushape cria sequências equilibradas usando teoria dos grafos.</p>
+              <p>Defina seus parâmetros e o Nushape cria sequências equilibradas considerando volume, variedade e equipamentos.</p>
               <button class="button-primary btn-create-workout" data-open-workout-modal>
                 <span>Criar novo treino </span><span class="icon">+</span>
               </button>
@@ -217,48 +517,11 @@
               <button type="button" class="icon-square-button danger" data-delete-workout aria-label="Excluir treino">
                 <img src="assets/icons/lixeira-de-reciclagem.png" alt="" width="20" height="20">
               </button>
+              <button type="button" class="button-secondary" data-export-workout>Exportar PDF</button>
               <button class="button-outline" id="closeDetailsBtn">Fechar</button>
             </div>
           </div>
           <div id="workoutDetailsBody"></div>
-        </div>
-      </div>
-
-      <!-- PÁGINA: GRAFO -->
-      <div id="page-grafo" class="page">
-        <div class="info-card">
-          <div class="graph-card-header">
-            <div>
-              <h2 class="search-title">Grafo dos Exercícios <img src="assets/icons/grafos.png" width="auto" alt="" height="18px" style="vertical-align: middle; margin-left: 4px;"></h2>
-              <p style="color: var(--muted); margin-top: 8px; margin-bottom:16px;">Cada vértice representa um exercício selecionado e cada aresta indica o custo/direção de transição.</p>
-            </div>
-          </div>
-
-          <div id="graphEmptyState" class="empty-state small" style="display:none;">
-            <div class="empty-icon">🔌</div>
-            <p style="font-weight: 600;">Nenhum exercício selecionado</p>
-            <p style="font-size: 13px; color: var(--muted); margin-top: 6px;">Escolha alguns exercícios para visualizar as representações do grafo.</p>
-          </div>
-
-          <div class="graph-panels" id="graphPanels">
-            <section class="graph-panel">
-              <div class="graph-panel-header">
-                <h4>Matriz de Adjacência</h4>
-                <p>Mostra o peso da transição entre cada par de exercícios.</p>
-              </div>
-              <div class="graph-table-wrapper">
-                <table class="graph-table" id="adjacencyMatrixTable"></table>
-              </div>
-            </section>
-
-            <section class="graph-panel">
-              <div class="graph-panel-header">
-                <h4>Lista de Adjacência</h4>
-                <p>Vizinho → peso da aresta (custo de troca).</p>
-              </div>
-              <div class="graph-list" id="adjacencyListContainer"></div>
-            </section>
-          </div>
         </div>
       </div>
 
@@ -276,16 +539,27 @@
             <section class="progress-card">
               <div class="progress-card-header">
                 <div>
-                  <h3>Desempenho nos Treinos</h3>
-                  <p>Resumo dos seus treinos ficará disponível em breve.</p>
+                  <h3>Força por exercício</h3>
+                  <p>Veja se houve evolução nas cargas e repetições.</p>
                 </div>
-                <span class="chip chip-soon">Em breve</span>
               </div>
 
-              <div class="empty-state small">
-                <div class="empty-icon">💪</div>
-                <p style="font-size:15px; font-weight:500;">Estamos preparando gráficos de carga e frequência</p>
-                <p style="font-size:13px; color:var(--muted); margin-top:6px;">Continue registrando avaliações para já acompanhar seu shape.</p>
+              <div class="form-field">
+                <span>Filtrar exercício</span>
+                <select id="strengthExerciseSelect"></select>
+              </div>
+              <div class="pill-options" id="strengthChartMode">
+                <button type="button" data-mode="weight" class="is-selected">Peso</button>
+                <button type="button" data-mode="strength">Peso × Reps (força)</button>
+              </div>
+
+              <div id="strengthChartEmpty" class="empty-state small" style="display:none;">
+                <div class="empty-icon">📈</div>
+                <p style="font-size:15px; font-weight:500;">Sem registros suficientes</p>
+                <p style="font-size:13px; color:var(--muted); margin-top:6px;">Registre sessões para ver o gráfico de força.</p>
+              </div>
+              <div class="chart-area" id="strengthChartArea">
+                <canvas id="strengthChart" height="220"></canvas>
               </div>
             </section>
 
@@ -331,88 +605,123 @@
             </div>
           </div>
 
-          <form id="profileForm" class="profile-form">
-            <section class="form-section">
-              <h3>Informações pessoais</h3>
-              <div class="form-grid">
-                <label class="form-field">
-                  <span>Nome completo</span>
-                  <input type="text" id="profileName" name="name" placeholder="Digite seu nome completo" autocomplete="name">
-                </label>
-                <label class="form-field">
-                  <span>Celular</span>
-                  <input type="tel" id="profilePhone" name="phone" placeholder="(16) 99999-9999" autocomplete="tel">
-                </label>
-                <label class="form-field">
-                  <span>Data de nascimento</span>
-                  <input type="date" id="profileBirthdate" name="birthdate" max="9999-12-31">
-                </label>
-                <label class="form-field">
-                  <span>E-mail</span>
-                  <input type="email" id="profileEmail" name="email" placeholder="voce@email.com" autocomplete="email">
-                </label>
-              </div>
-
-              <div class="form-grid">
-                <div class="form-field">
-                  <span>Gênero</span>
-                  <div class="radio-group">
-                    <label class="radio-inline">
-                      <input type="radio" name="gender" value="masculino">
-                      <span>Masculino</span>
+          <div class="dados-layout">
+            <div class="dados-main">
+              <form id="profileForm" class="profile-form">
+                <section class="form-section">
+                  <h3>Informações pessoais</h3>
+                  <div class="form-grid dados-grid">
+                    <label class="form-field">
+                      <span>Nome completo</span>
+                      <input type="text" id="profileName" name="name" placeholder="Digite seu nome completo" autocomplete="name">
                     </label>
-                    <label class="radio-inline">
-                      <input type="radio" name="gender" value="feminino">
-                      <span>Feminino</span>
+                    <label class="form-field">
+                      <span>Celular</span>
+                      <input type="tel" id="profilePhone" name="phone" placeholder="(16) 99999-9999" autocomplete="tel">
                     </label>
-                    <label class="radio-inline">
-                      <input type="radio" name="gender" value="outro">
-                      <span>Outro</span>
+                    <label class="form-field">
+                      <span>Data de nascimento</span>
+                      <input type="date" id="profileBirthdate" name="birthdate" max="9999-12-31">
+                    </label>
+                    <label class="form-field">
+                      <span>E-mail</span>
+                      <input type="email" id="profileEmail" name="email" placeholder="voce@email.com" autocomplete="email" readonly aria-readonly="true">
                     </label>
                   </div>
-                </div>
 
-                <div class="form-field">
-                  <span>Biotipo</span>
-                  <div class="radio-group">
-                    <label class="radio-inline">
-                      <input type="radio" name="biotype" value="ectomorfo">
-                      <span>Ectomorfo</span>
+                  <div class="form-grid dados-grid">
+                    <div class="form-field">
+                      <span>Gênero</span>
+                      <div class="radio-group">
+                        <label class="radio-inline">
+                          <input type="radio" name="gender" value="masculino">
+                          <span>Masculino</span>
+                        </label>
+                        <label class="radio-inline">
+                          <input type="radio" name="gender" value="feminino">
+                          <span>Feminino</span>
+                        </label>
+                        <label class="radio-inline">
+                          <input type="radio" name="gender" value="outro">
+                          <span>Outro</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-field">
+                      <span>Biotipo</span>
+                      <div class="radio-group">
+                        <label class="radio-inline">
+                          <input type="radio" name="biotype" value="ectomorfo">
+                          <span>Ectomorfo</span>
+                        </label>
+                        <label class="radio-inline">
+                          <input type="radio" name="biotype" value="mesomorfo">
+                          <span>Mesomorfo</span>
+                        </label>
+                        <label class="radio-inline">
+                          <input type="radio" name="biotype" value="endomorfo">
+                          <span>Endomorfo</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="dados-card dados-status">
+                    <div class="dados-card-header">
+                      <div>
+                        <h3>Status da conta</h3>
+                        <p>Acompanhe sua sincronização com a nuvem.</p>
+                      </div>
+                      <span class="chip chip-positive" id="profileSyncStatus">Sincronizando</span>
+                    </div>
+                    <div class="dados-card-list">
+                      <div>
+                        <span>Última sincronização</span>
+                        <strong id="profileSyncTime">—</strong>
+                      </div>
+                      <div>
+                        <span>Conta conectada</span>
+                        <strong id="profileSyncEmail">—</strong>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="form-section">
+                  <h3>Última Avaliação Física</h3>
+                  <div id="lastEvaluationCard" class="last-evaluation-card">
+                    <p class="empty-text">Você ainda não registrou nenhuma avaliação física.</p>
+                  </div>
+                </section>
+
+                <section class="form-section">
+                  <h3>Segurança da conta</h3>
+                  <div class="form-grid">
+                    <label class="form-field">
+                      <span>Nova senha</span>
+                      <input type="password" id="profilePassword" name="newPassword" placeholder="Digite a nova senha">
                     </label>
-                    <label class="radio-inline">
-                      <input type="radio" name="biotype" value="mesomorfo">
-                      <span>Mesomorfo</span>
-                    </label>
-                    <label class="radio-inline">
-                      <input type="radio" name="biotype" value="endomorfo">
-                      <span>Endomorfo</span>
+                    <label class="form-field">
+                      <span>Confirmar nova senha</span>
+                      <input type="password" id="profilePasswordConfirm" name="confirmPassword" placeholder="Repita a nova senha">
                     </label>
                   </div>
-                </div>
-              </div>
-            </section>
+                  <p class="dados-hint">A senha é atualizada na sua conta do Supabase.</p>
 
-            <section class="form-section">
-              <h3>Última Avaliação Física:</h3>
-              <div id="lastEvaluationCard" class="last-evaluation-card">
-                <p class="empty-text">Você ainda não registrou nenhuma avaliação física.</p>
-              </div>
-            </section>
-
-            <div class="form-actions">
-              <div class="backup-actions">
-                <div class="backup-buttons">
-                  <button type="button" class="button-outline" data-import-button> Importar dados (.nushape)</button>
-                  <button type="button" class="button-danger" data-open-clear>
-                    <img src="assets/icons/lixeira-de-reciclagem-branca.png" alt="" width="auto" height="15px">
-                    Limpar todos os dados
-                  </button>
-                </div>
-                <p class="backup-hint">Use o botão “Exportar dados” no topo para gerar um arquivo comprimido e restaure aqui quando desejar.</p>
-                <input type="file" id="importInput" accept=".nushape,application/json" hidden>
-              </div>
+                  <div class="danger-zone">
+                    <div>
+                      <h4>Excluir conta</h4>
+                      <p>Essa ação remove sua conta e todos os dados associados. Não é possível desfazer.</p>
+                    </div>
+                    <button type="button" class="button-danger" id="deleteAccountBtn">Excluir conta</button>
+                  </div>
+                </section>
+              </form>
             </div>
-          </form>
+
+            <aside class="dados-side"></aside>
+          </div>
         </div>
       </div>
     </main>
@@ -493,7 +802,7 @@
     <div class="modal-card export-modal">
       <div class="modal-header">
         <div>
-          <h3 id="exportTitle">Exportação com Huffman pronta</h3>
+          <h3 id="exportTitle">Exportação pronta</h3>
           <p>Seus dados foram comprimidos. Baixe o arquivo para restaurar depois.</p>
         </div>
         <button type="button" class="modal-close" data-close-export aria-label="Fechar modal">×</button>
@@ -525,20 +834,20 @@
           <strong id="exportTime">-</strong>
         </div>
         <div class="export-metric">
-          <span class="label">Caracteres únicos</span>
-          <strong id="exportUniqueChars">-</strong>
+          <span class="label">Exercícios selecionados</span>
+          <strong id="exportSelectedCount">-</strong>
         </div>
         <div class="export-metric">
-          <span class="label">Profundidade média</span>
-          <strong id="exportAvgDepth">-</strong>
+          <span class="label">Treinos salvos</span>
+          <strong id="exportWorkoutCount">-</strong>
         </div>
         <div class="export-metric">
-          <span class="label">Altura da árvore</span>
-          <strong id="exportTreeHeight">-</strong>
+          <span class="label">Avaliações</span>
+          <strong id="exportEvaluationCount">-</strong>
         </div>
       </div>
 
-      <p class="export-note">O arquivo gerado terá extensão <strong>.nushape</strong> e inclui árvore de Huffman e dados comprimidos.</p>
+      <p class="export-note">O arquivo gerado terá extensão <strong>.nushape</strong> e inclui seus dados comprimidos.</p>
 
     </div>
   </div>
@@ -571,6 +880,18 @@
         <div class="workout-step is-active" data-step="1">
           <h4>🎯 Configurações básicas</h4>
           <div class="workout-field-group">
+            <span>Divisão de treino</span>
+            <div class="card-options" id="divisionOptions">
+              <label><input type="radio" name="division" value="Bro Split"> Bro Split</label>
+              <label><input type="radio" name="division" value="Push / Pull / Legs"> Push / Pull / Legs</label>
+              <label><input type="radio" name="division" value="Upper / Lower"> Upper / Lower</label>
+              <label><input type="radio" name="division" value="PPL + Upper/Lower"> PPL + Upper/Lower</label>
+              <label><input type="radio" name="division" value="Full Body"> Full Body</label>
+              <label><input type="radio" name="division" value="Sem Preferência" checked> Sem preferência</label>
+            </div>
+          </div>
+
+          <div class="workout-field-group">
             <span>Quantos dias por semana?</span>
             <div class="pill-options" id="daysOptions">
               <button type="button" data-value="3">3 dias</button>
@@ -581,24 +902,12 @@
           </div>
 
           <div class="workout-field-group">
-            <span>Divisão de treino</span>
-            <div class="card-options" id="divisionOptions">
-              <label><input type="radio" name="division" value="Bro Split"> Bro Split</label>
-              <label><input type="radio" name="division" value="PPL"> Push / Pull / Legs</label>
-              <label><input type="radio" name="division" value="Upper Lower"> Upper / Lower</label>
-              <label><input type="radio" name="division" value="PPL + UL"> PPL + Upper/Lower</label>
-              <label><input type="radio" name="division" value="Full Body"> Full Body</label>
-              <label><input type="radio" name="division" value="Sem Preferência" checked> Sem preferência</label>
-            </div>
-          </div>
-
-          <div class="workout-field-group">
             <span>Volume semanal</span>
             <div class="card-options" id="volumeOptions">
-              <label><input type="radio" name="volume" value="low"> 🔴 Baixo (8-10 séries)</label>
-              <label><input type="radio" name="volume" value="medium" checked> 🟡 Médio (12-16 séries)</label>
-              <label><input type="radio" name="volume" value="high"> 🟢 Alto (18-22 séries)</label>
-              <label><input type="radio" name="volume" value="deload"> 🔵 Deload (6-8 séries)</label>
+              <label><input type="radio" name="volume" value="low"> 🔴 Baixo</label>
+              <label><input type="radio" name="volume" value="medium" checked> 🟡 Médio</label>
+              <label><input type="radio" name="volume" value="high"> 🟢 Alto</label>
+              <label><input type="radio" name="volume" value="deload"> 🔵 Deload</label>
             </div>
           </div>
 
@@ -633,10 +942,10 @@
           <div class="generation-progress" id="generationProgress">
             <div class="progress-bar"><span></span></div>
             <ul>
-              <li data-task="recovery">Validando recuperação muscular</li>
+              <li data-task="recovery">Checando equilíbrio muscular</li>
               <li data-task="equipment">Agrupando por equipamento</li>
-              <li data-task="ordering">Otimizando ordem (Dijkstra)</li>
-              <li data-task="coloring">Colorindo dias (Welch-Powell)</li>
+              <li data-task="ordering">Organizando a ordem do treino</li>
+              <li data-task="coloring">Distribuindo exercícios nos dias</li>
             </ul>
           </div>
           <div class="generation-result" id="generationResult" style="display:none;" aria-live="polite"></div>
@@ -671,14 +980,44 @@
     </div>
   </div>
 
+  <div id="deleteAccountModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="deleteAccountTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 id="deleteAccountTitle">Excluir conta</h3>
+          <p>Essa ação remove sua conta e todos os dados associados. Não é possível desfazer.</p>
+        </div>
+        <button type="button" class="modal-close" data-close-delete-account aria-label="Fechar modal">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--muted);">Conta conectada: <strong id="deleteAccountEmail">—</strong></p>
+        <div class="form-field" style="margin-top: 16px;">
+          <span>Digite NUDELETE-2026 para confirmar</span>
+          <input type="text" id="deleteAccountConfirmInput" placeholder="NUDELETE-2026">
+        </div>
+        <p class="dados-hint">Após a confirmação, seus dados serão removidos do Supabase.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="button-outline" data-close-delete-account>Cancelar</button>
+        <button type="button" class="button-danger" id="confirmDeleteAccountBtn" disabled>Excluir conta</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.SUPABASE_URL = 'https://heywyqtihsajvkeydubr.supabase.co';
+    window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleXd5cXRpaHNhanZrZXlkdWJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4NjIwOTYsImV4cCI6MjA4NjQzODA5Nn0.zxHdGVyTlHC1laqjyvEDkKrCNL-yuTpu0LcaQUa9wrQ';
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/exercicios.js" defer></script>
   <script src="js/util.js" defer></script>
-  <script src="js/buscaSequencial.js" defer></script>
-  <script src="js/buscaBinaria.js" defer></script>
-  <script src="js/rabinKarp.js" defer></script>
+  <script src="js/lz-string.js" defer></script>
+  <script src="js/pdf-lib.min.js" defer></script>
+  <script src="js/chart.umd.min.js" defer></script>
+  <script src="js/fontkit.umd.min.js" defer></script>
+  <script src="js/aiGenerator.js" defer></script>
+  <script src="js/pdfExport.js" defer></script>
   <script src="js/exportBtn.js"></script>
-  <script src="js/graph-representation.js" defer></script>
-  <script src="js/huffman.js" defer></script>
   <script src="js/script.js" defer></script>
 </body>
 

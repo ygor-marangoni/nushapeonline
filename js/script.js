@@ -2,22 +2,87 @@
 
 const supportsPointerEvents = 'PointerEvent' in window;
 
-let mode = 'sequential';
 let selectedExercises = [];
-const sorted = [...exercises].sort((a, b) =>
-  a.name.localeCompare(b.name, 'pt-BR'),
-);
 const ACTIVE_PAGE_STORAGE_KEY = 'nushape_active_page';
-const VALID_PAGES = ['exercicios', 'treinos', 'grafo', 'progresso', 'dados'];
+const SELECTED_EXERCISES_STORAGE_KEY = 'nushape_selected_exercises';
+const VALID_PAGES = [
+  'login',
+  'dashboard',
+  'biblioteca',
+  'sessao',
+  'exercicios',
+  'treinos',
+  'progresso',
+  'dados',
+];
 
 /* PERFIL & AVALIAÇÕES - ESTADO */
 const PROFILE_STORAGE_KEY = 'nushape_profile';
 const EVALUATION_STORAGE_KEY = 'nushape_evaluations';
 const WORKOUT_STORAGE_KEY = 'nushape_workouts';
+const SESSION_STORAGE_KEY = 'nushape_session_logs';
+const STATE_META_STORAGE_KEY = 'nushape_state_meta';
+const STATE_OWNER_STORAGE_KEY = 'nushape_state_owner';
+const CLOUD_STATE_TABLE = 'user_state';
+const EVALUATIONS_TABLE = 'physical_evaluations';
+const EXPORT_PACKAGE_VERSION = 1;
+const EXPORT_DATA_VERSION = 3;
+const EXPORT_CODEC = 'lz-string';
 
+const storageService = {
+  getJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    } catch (error) {
+      console.warn(`Não foi possível ler ${key} do storage.`, error);
+      return fallback;
+    }
+  },
+  setJSON(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      console.warn(`Não foi possível salvar ${key} no storage.`, error);
+      return false;
+    }
+  },
+  getString(key, fallback = '') {
+    try {
+      const raw = localStorage.getItem(key);
+      return typeof raw === 'string' ? raw : fallback;
+    } catch (error) {
+      console.warn(`Não foi possível ler ${key} do storage.`, error);
+      return fallback;
+    }
+  },
+  setString(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn(`Não foi possível salvar ${key} no storage.`, error);
+      return false;
+    }
+  },
+  clearAll() {
+    try {
+      localStorage.clear();
+      return true;
+    } catch (error) {
+      console.warn('Não foi possível limpar o storage.', error);
+      return false;
+    }
+  },
+};
+
+let stateMeta = loadStateMeta();
 let profileData = loadProfileFromStorage();
 let evaluations = loadEvaluationsFromStorage();
 let workouts = loadWorkoutsFromStorage();
+let sessionLogs = loadSessionLogsFromStorage();
 
 const profileForm = document.getElementById('profileForm');
 const profileFeedback = document.getElementById('profileFeedback');
@@ -34,9 +99,11 @@ const exportOriginalSizeEl = document.getElementById('exportOriginalSize');
 const exportCompressedSizeEl = document.getElementById('exportCompressedSize');
 const exportSavingsEl = document.getElementById('exportSavings');
 const exportTimeEl = document.getElementById('exportTime');
-const exportUniqueCharsEl = document.getElementById('exportUniqueChars');
-const exportAvgDepthEl = document.getElementById('exportAvgDepth');
-const exportTreeHeightEl = document.getElementById('exportTreeHeight');
+const exportSelectedCountEl = document.getElementById('exportSelectedCount');
+const exportWorkoutCountEl = document.getElementById('exportWorkoutCount');
+const exportEvaluationCountEl = document.getElementById(
+  'exportEvaluationCount',
+);
 const importInput = document.getElementById('importInput');
 const importTrigger = document.querySelector('[data-import-button]');
 const deleteWorkoutModal = document.getElementById('deleteWorkoutModal');
@@ -44,6 +111,40 @@ const deleteWorkoutName = document.getElementById('deleteWorkoutName');
 const confirmDeleteWorkoutBtn = document.getElementById(
   'confirmDeleteWorkoutBtn',
 );
+const deleteAccountModal = document.getElementById('deleteAccountModal');
+const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+const deleteAccountConfirmInput = document.getElementById(
+  'deleteAccountConfirmInput',
+);
+const confirmDeleteAccountBtn = document.getElementById(
+  'confirmDeleteAccountBtn',
+);
+const deleteAccountEmail = document.getElementById('deleteAccountEmail');
+const closeDeleteAccountButtons = document.querySelectorAll(
+  '[data-close-delete-account]',
+);
+const authTrigger = document.getElementById('authTrigger');
+const loginView = document.getElementById('loginView');
+const registerView = document.getElementById('registerView');
+const confirmView = document.getElementById('confirmView');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+const loginEmailInput = document.getElementById('login-email');
+const loginPasswordInput = document.getElementById('login-password');
+const registerNameInput = document.getElementById('reg-name');
+const registerEmailInput = document.getElementById('reg-email');
+const registerPasswordInput = document.getElementById('reg-password');
+const registerConfirmInput = document.getElementById('reg-confirm');
+const authSwitchButtons = document.querySelectorAll('[data-auth-switch]');
+const authResetLink = document.querySelector('[data-auth-reset]');
+const authLogoutButtons = document.querySelectorAll('[data-auth-logout]');
+const authResendButton = document.querySelector('[data-auth-resend]');
+const confirmEmailLabel = document.getElementById('confirmEmail');
+const authYear = document.getElementById('authYear');
+const authFeedback = document.getElementById('authFeedback');
+const profileSyncStatus = document.getElementById('profileSyncStatus');
+const profileSyncTime = document.getElementById('profileSyncTime');
+const profileSyncEmail = document.getElementById('profileSyncEmail');
 const workoutModal = document.getElementById('workoutModal');
 const workoutForm = document.getElementById('workoutForm');
 const workoutList = document.getElementById('workoutList');
@@ -59,6 +160,9 @@ const divisionOptions = document.getElementById('divisionOptions');
 const volumeOptions = document.getElementById('volumeOptions');
 const requirementsContainer = document.getElementById('exerciseRequirements');
 const requirementsHint = document.getElementById('requirementsHint');
+const searchInput = document.getElementById('searchInput');
+const muscleSelect = document.getElementById('muscleSelect');
+const resultsContainer = document.getElementById('results');
 const generateWorkoutBtn = document.getElementById('generateWorkoutBtn');
 const generationProgress = document.getElementById('generationProgress');
 const generationResult = document.getElementById('generationResult');
@@ -69,6 +173,186 @@ const openWorkoutButtons = document.querySelectorAll(
 );
 const closeWorkoutButtons = document.querySelectorAll('[data-close-workout]');
 
+const dashboardGreeting = document.getElementById('dashboardGreeting');
+const dashboardSubtext = document.getElementById('dashboardSubtext');
+const dashWorkoutsCount = document.getElementById('dashWorkoutsCount');
+const dashSelectedCount = document.getElementById('dashSelectedCount');
+const dashEvaluationCount = document.getElementById('dashEvaluationCount');
+const dashLastVolume = document.getElementById('dashLastVolume');
+const dashboardLastWorkout = document.getElementById('dashboardLastWorkout');
+const dashboardLastWorkoutEmpty = document.getElementById(
+  'dashboardLastWorkoutEmpty',
+);
+const dashboardNextSteps = document.getElementById('dashboardNextSteps');
+const dashboardProfileSummary = document.getElementById(
+  'dashboardProfileSummary',
+);
+const dashboardEvaluationSummary = document.getElementById(
+  'dashboardEvaluationSummary',
+);
+const dashboardEvaluationEmpty = document.getElementById(
+  'dashboardEvaluationEmpty',
+);
+const dashboardChartCanvas = document.getElementById('dashboardChart');
+const dashboardChartEmpty = document.getElementById('dashboardChartEmpty');
+const dashboardChartArea = document.getElementById('dashboardChartArea');
+
+let dashboardChartInstance = null;
+
+const librarySearchInput = document.getElementById('librarySearch');
+const libraryFilters = document.getElementById('libraryFilters');
+const libraryGrid = document.getElementById('libraryGrid');
+const libraryFeatured = document.getElementById('libraryFeatured');
+const libraryEmpty = document.getElementById('libraryEmpty');
+
+const sessionWorkoutSelect = document.getElementById('sessionWorkoutSelect');
+const sessionDaySelect = document.getElementById('sessionDaySelect');
+const sessionDateInput = document.getElementById('sessionDateInput');
+const sessionExercisesContainer = document.getElementById('sessionExercises');
+const sessionEmpty = document.getElementById('sessionEmpty');
+const sessionContent = document.getElementById('sessionContent');
+const sessionSummary = document.getElementById('sessionSummary');
+const saveSessionBtn = document.getElementById('saveSessionBtn');
+const sessionFeedback = document.getElementById('sessionFeedback');
+
+const strengthExerciseSelect = document.getElementById(
+  'strengthExerciseSelect',
+);
+const strengthChartMode = document.getElementById('strengthChartMode');
+const strengthChartCanvas = document.getElementById('strengthChart');
+const strengthChartEmpty = document.getElementById('strengthChartEmpty');
+const strengthChartArea = document.getElementById('strengthChartArea');
+let strengthChartInstance = null;
+
+const strengthChartState = {
+  mode: 'weight',
+};
+
+let pendingConfirmEmail = '';
+let registerCooldownUntil = 0;
+let registerCooldownTimer = null;
+
+const cloudSyncState = {
+  client: null,
+  user: null,
+  ready: false,
+  syncing: false,
+  syncTimer: null,
+  lastSyncAt: null,
+};
+const workoutCloudSync = {
+  syncing: false,
+  syncTimer: null,
+  lastSyncAt: null,
+};
+const evaluationCloudSync = {
+  syncing: false,
+  syncTimer: null,
+  lastSyncAt: null,
+};
+let cloudSyncSuspended = false;
+
+if (librarySearchInput) {
+  librarySearchInput.addEventListener('input', (event) => {
+    libraryState.query = event.target.value || '';
+    renderLibrary();
+  });
+}
+
+if (libraryFilters) {
+  libraryFilters.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-filter]');
+    if (!button) return;
+    const filter = button.dataset.filter || 'all';
+    libraryFilters
+      .querySelectorAll('button')
+      .forEach((btn) => btn.classList.remove('is-selected'));
+    button.classList.add('is-selected');
+    libraryState.filter = filter;
+    renderLibrary();
+  });
+}
+
+if (libraryGrid) {
+  libraryGrid.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-library-add]');
+    if (!trigger) return;
+    const targetId = trigger.dataset.libraryAdd;
+    const item = WORKOUT_LIBRARY.find((entry) => entry.id === targetId);
+    if (!item) return;
+    const plan = createLibraryWorkout(item);
+    workouts.push(plan);
+    saveWorkoutsToStorage(workouts);
+    renderWorkoutCards();
+    applyLibrarySelection(plan);
+    navigateTo('treinos');
+    setTimeout(() => showWorkoutDetails(plan.id), 0);
+  });
+}
+
+if (libraryFeatured) {
+  libraryFeatured.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-library-add]');
+    if (!trigger) return;
+    const targetId = trigger.dataset.libraryAdd;
+    const item = WORKOUT_LIBRARY.find((entry) => entry.id === targetId);
+    if (!item) return;
+    const plan = createLibraryWorkout(item);
+    workouts.push(plan);
+    saveWorkoutsToStorage(workouts);
+    renderWorkoutCards();
+    applyLibrarySelection(plan);
+    navigateTo('treinos');
+    setTimeout(() => showWorkoutDetails(plan.id), 0);
+  });
+}
+
+if (sessionWorkoutSelect) {
+  sessionWorkoutSelect.addEventListener('change', (event) => {
+    sessionState.workoutId = event.target.value;
+    sessionState.dayIndex = 0;
+    renderSessionUI();
+  });
+}
+
+if (sessionDaySelect) {
+  sessionDaySelect.addEventListener('change', (event) => {
+    sessionState.dayIndex = Number(event.target.value);
+    renderSessionUI();
+  });
+}
+
+if (sessionDateInput) {
+  sessionDateInput.addEventListener('change', (event) => {
+    sessionState.date = event.target.value;
+  });
+}
+
+if (saveSessionBtn) {
+  saveSessionBtn.addEventListener('click', handleSessionSave);
+}
+
+if (strengthExerciseSelect) {
+  strengthExerciseSelect.addEventListener('change', (event) => {
+    renderStrengthChart(event.target.value);
+  });
+}
+
+if (strengthChartMode) {
+  strengthChartMode.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-mode]');
+    if (!button) return;
+    strengthChartMode
+      .querySelectorAll('button')
+      .forEach((btn) => btn.classList.remove('is-selected'));
+    button.classList.add('is-selected');
+    strengthChartState.mode = button.dataset.mode || 'both';
+    if (strengthExerciseSelect?.value) {
+      renderStrengthChart(strengthExerciseSelect.value);
+    }
+  });
+}
+
 const MIN_EXERCISES = {
   Peitoral: 2,
   Costas: 2,
@@ -76,6 +360,659 @@ const MIN_EXERCISES = {
   Braços: 2,
   Ombros: 1,
 };
+
+const DIVISION_DAY_RULES = {
+  'Bro Split': [4, 5, 6],
+  'Push / Pull / Legs': [3, 4, 5, 6],
+  'Upper / Lower': [4],
+  'PPL + Upper/Lower': [5],
+  'Full Body': [3],
+  'Sem Preferência': [3, 4, 5, 6],
+};
+
+const WORKOUT_LIBRARY = [
+  {
+    id: 'arnold-1974',
+    name: 'Arnold Schwarzenegger',
+    country: 'Áustria/EUA',
+    era: 'Golden Era',
+    region: 'world',
+    focus: 'Peito + costas em supersets, alto volume para o torso.',
+    split: [
+      'Dia 1, 3 e 5: Peito + Costas (supersets).',
+      'Dia 2, 4 e 6: Ombro + Braços.',
+      'Dia 7: Pernas (sessão dedicada).',
+    ],
+    keyMoves: [
+      'Supino Reto',
+      'Supino Inclinado',
+      'Crucifixo com Halteres',
+      'Pullover na Máquina',
+      'Barra Fixa',
+      'Remada Curvada',
+      'Puxada na Frente (Pulldown)',
+      'Levantamento Terra',
+      'Desenvolvimento Militar',
+      'Elevação Lateral',
+      'Elevação Frontal',
+      'Peck-Deck Reverso',
+      'Rosca Direta',
+      'Rosca Alternada',
+      'Rosca Scott',
+      'Paralela (Dips)',
+      'Tríceps Testa',
+      'Tríceps Corda na Polia',
+      'Agachamento Livre',
+      'Leg Press 45',
+      'Cadeira Extensora',
+      'Mesa Flexora',
+      'Panturrilha em Pé',
+    ],
+    tags: ['Mundial', 'Peito/Costas', 'Supersets', 'Split 6x'],
+    highlight:
+      'Peito + costas em supersets três vezes por semana, com ombros/braços intercalados.',
+    planDays: [
+      {
+        label: 'Dia 1 — Peito + Costas',
+        exercises: [
+          { name: 'Supino Reto', sets: 5, reps: '6-10' },
+          { name: 'Supino Inclinado', sets: 5, reps: '8-12' },
+          { name: 'Crucifixo com Halteres', sets: 5, reps: '10-15' },
+          { name: 'Pullover na Máquina', sets: 5, reps: '10-15' },
+          { name: 'Barra Fixa', sets: 5, reps: 'falha' },
+          { name: 'Remada Curvada', sets: 5, reps: '8-12' },
+          { name: 'Puxada na Frente (Pulldown)', sets: 5, reps: '10' },
+          { name: 'Levantamento Terra', sets: 4, reps: '6-10' },
+        ],
+      },
+      {
+        label: 'Dia 2 — Ombro + Braços',
+        exercises: [
+          { name: 'Desenvolvimento Militar', sets: 5, reps: '6-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '10-15' },
+          { name: 'Elevação Frontal', sets: 4, reps: '10' },
+          { name: 'Peck-Deck Reverso', sets: 5, reps: '12' },
+          { name: 'Rosca Direta', sets: 5, reps: '6-10' },
+          { name: 'Rosca Alternada', sets: 5, reps: '8-12' },
+          { name: 'Rosca Scott', sets: 4, reps: '10' },
+          { name: 'Paralela (Dips)', sets: 5, reps: 'falha' },
+          { name: 'Tríceps Testa', sets: 5, reps: '8-12' },
+          { name: 'Tríceps Corda na Polia', sets: 5, reps: '10-15' },
+        ],
+      },
+      {
+        label: 'Dia 3 — Peito + Costas',
+        exercises: [
+          { name: 'Supino Reto', sets: 5, reps: '6-10' },
+          { name: 'Supino Inclinado', sets: 5, reps: '8-12' },
+          { name: 'Crucifixo com Halteres', sets: 5, reps: '10-15' },
+          { name: 'Pullover na Máquina', sets: 5, reps: '10-15' },
+          { name: 'Barra Fixa', sets: 5, reps: 'falha' },
+          { name: 'Remada Curvada', sets: 5, reps: '8-12' },
+          { name: 'Puxada na Frente (Pulldown)', sets: 5, reps: '10' },
+          { name: 'Levantamento Terra', sets: 4, reps: '6-10' },
+        ],
+      },
+      {
+        label: 'Dia 4 — Ombro + Braços',
+        exercises: [
+          { name: 'Desenvolvimento Militar', sets: 5, reps: '6-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '10-15' },
+          { name: 'Elevação Frontal', sets: 4, reps: '10' },
+          { name: 'Peck-Deck Reverso', sets: 5, reps: '12' },
+          { name: 'Rosca Direta', sets: 5, reps: '6-10' },
+          { name: 'Rosca Alternada', sets: 5, reps: '8-12' },
+          { name: 'Rosca Scott', sets: 4, reps: '10' },
+          { name: 'Paralela (Dips)', sets: 5, reps: 'falha' },
+          { name: 'Tríceps Testa', sets: 5, reps: '8-12' },
+          { name: 'Tríceps Corda na Polia', sets: 5, reps: '10-15' },
+        ],
+      },
+      {
+        label: 'Dia 5 — Peito + Costas',
+        exercises: [
+          { name: 'Supino Reto', sets: 5, reps: '6-10' },
+          { name: 'Supino Inclinado', sets: 5, reps: '8-12' },
+          { name: 'Crucifixo com Halteres', sets: 5, reps: '10-15' },
+          { name: 'Pullover na Máquina', sets: 5, reps: '10-15' },
+          { name: 'Barra Fixa', sets: 5, reps: 'falha' },
+          { name: 'Remada Curvada', sets: 5, reps: '8-12' },
+          { name: 'Puxada na Frente (Pulldown)', sets: 5, reps: '10' },
+          { name: 'Levantamento Terra', sets: 4, reps: '6-10' },
+        ],
+      },
+      {
+        label: 'Dia 6 — Ombro + Braços',
+        exercises: [
+          { name: 'Desenvolvimento Militar', sets: 5, reps: '6-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '10-15' },
+          { name: 'Elevação Frontal', sets: 4, reps: '10' },
+          { name: 'Peck-Deck Reverso', sets: 5, reps: '12' },
+          { name: 'Rosca Direta', sets: 5, reps: '6-10' },
+          { name: 'Rosca Alternada', sets: 5, reps: '8-12' },
+          { name: 'Rosca Scott', sets: 4, reps: '10' },
+          { name: 'Paralela (Dips)', sets: 5, reps: 'falha' },
+          { name: 'Tríceps Testa', sets: 5, reps: '8-12' },
+          { name: 'Tríceps Corda na Polia', sets: 5, reps: '10-15' },
+        ],
+      },
+      {
+        label: 'Dia 7 — Pernas (dedicado)',
+        exercises: [
+          { name: 'Agachamento Livre', sets: 5, reps: '8-12' },
+          { name: 'Leg Press 45', sets: 5, reps: '10-15' },
+          { name: 'Cadeira Extensora', sets: 5, reps: '12-15' },
+          { name: 'Mesa Flexora', sets: 5, reps: '12-15' },
+          { name: 'Panturrilha em Pé', sets: 10, reps: '12-20' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'jay-cutler-classic',
+    name: 'Jay Cutler',
+    country: 'EUA',
+    era: 'Mr. Olympia 2000s',
+    region: 'world',
+    focus: 'Divisão por grupamentos com alto volume e recuperação planejada.',
+    split: [
+      'Dia 1: Peito',
+      'Dia 2: Costas',
+      'Dia 3: Braços',
+      'Dia 4: Descanso',
+      'Dia 5: Ombros',
+      'Dia 6: Pernas',
+      'Dia 7: Descanso',
+    ],
+    keyMoves: [
+      'Supino Inclinado',
+      'Supino Máquina (Chest Press)',
+      'Crucifixo Inclinado',
+      'Crossover no Cabo',
+      'Puxada na Frente (Pulldown)',
+      'Remada Curvada',
+      'Remada Baixa',
+      'Pullover na Máquina',
+      'Desenvolvimento com Halteres',
+      'Elevação Lateral',
+      'Elevação Lateral na Máquina',
+      'Peck-Deck Reverso',
+      'Encolhimento com Barra',
+      'Leg Press 45',
+      'Agachamento Hack',
+      'Agachamento no Smith',
+      'Cadeira Extensora',
+      'Mesa Flexora',
+      'Panturrilha em Pé',
+      'Rosca Direta',
+      'Rosca Alternada',
+      'Rosca Concentrada',
+      'Tríceps Corda na Polia',
+      'Tríceps Testa',
+      'Tríceps Francês',
+    ],
+    tags: ['Mundial', 'Body Part Split', 'Volume alto'],
+    highlight:
+      'Cada músculo em um dia específico, com volume alto e descanso estratégico.',
+    planDays: [
+      {
+        label: 'Dia 1 — Peito',
+        exercises: [
+          { name: 'Supino Inclinado', sets: 5, reps: '8-12' },
+          { name: 'Supino Máquina (Chest Press)', sets: 4, reps: '10-12' },
+          { name: 'Crucifixo Inclinado', sets: 4, reps: '12' },
+          { name: 'Crossover no Cabo', sets: 4, reps: '12-15' },
+          { name: 'Paralela (Dips)', sets: 3, reps: 'falha' },
+        ],
+      },
+      {
+        label: 'Dia 2 — Costas',
+        exercises: [
+          { name: 'Puxada na Frente (Pulldown)', sets: 4, reps: '10-12' },
+          { name: 'Remada Curvada', sets: 4, reps: '8-10' },
+          { name: 'Remada Baixa', sets: 4, reps: '10' },
+          { name: 'Pullover na Máquina', sets: 4, reps: '12' },
+          { name: 'Levantamento Terra', sets: 3, reps: '6-8' },
+        ],
+      },
+      {
+        label: 'Dia 3 — Ombros',
+        exercises: [
+          { name: 'Desenvolvimento com Halteres', sets: 4, reps: '8-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '12-15' },
+          { name: 'Elevação Lateral na Máquina', sets: 4, reps: '15' },
+          { name: 'Peck-Deck Reverso', sets: 4, reps: '12-15' },
+          { name: 'Encolhimento com Barra', sets: 4, reps: '10' },
+        ],
+      },
+      {
+        label: 'Dia 4 — Pernas',
+        exercises: [
+          { name: 'Leg Press 45', sets: 5, reps: '10-15' },
+          { name: 'Agachamento Hack', sets: 4, reps: '10-12' },
+          { name: 'Agachamento no Smith', sets: 4, reps: '8-12' },
+          { name: 'Cadeira Extensora', sets: 4, reps: '15' },
+          { name: 'Mesa Flexora', sets: 4, reps: '12' },
+          { name: 'Panturrilha em Pé', sets: 8, reps: '12-20' },
+        ],
+      },
+      {
+        label: 'Dia 5 — Braços',
+        exercises: [
+          { name: 'Rosca Direta', sets: 4, reps: '8-10' },
+          { name: 'Rosca Alternada', sets: 4, reps: '10' },
+          { name: 'Rosca Concentrada', sets: 3, reps: '12' },
+          { name: 'Tríceps Corda na Polia', sets: 4, reps: '10-12' },
+          { name: 'Tríceps Testa', sets: 4, reps: '8-10' },
+          { name: 'Tríceps Francês', sets: 4, reps: '12' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'phil-heath-olympia',
+    name: 'Phil Heath',
+    country: 'EUA',
+    era: 'Mr. Olympia 2010s',
+    region: 'world',
+    focus: 'Divisão tradicional com sessões dedicadas e ênfase em qualidade.',
+    split: [
+      'Dia 1: Pernas',
+      'Dia 2: Peito',
+      'Dia 3: Costas',
+      'Dia 4: Ombros',
+      'Dia 5: Braços',
+      'Dia 6: Descanso',
+      'Dia 7: Reinicia o ciclo',
+    ],
+    keyMoves: [
+      'Supino com Halteres',
+      'Supino Máquina (Chest Press)',
+      'Crossover no Cabo',
+      'Crucifixo no Peck-Deck',
+      'Puxada Neutra na Polia',
+      'Remada Baixa',
+      'Remada Unilateral no Cabo',
+      'Pullover na Máquina',
+      'Desenvolvimento no Smith',
+      'Elevação Lateral',
+      'Elevação Lateral no Cabo',
+      'Peck-Deck Reverso',
+      'Leg Press 45',
+      'Agachamento Hack',
+      'Cadeira Extensora',
+      'Mesa Flexora',
+      'Panturrilha em Pé',
+      'Rosca Alternada',
+      'Rosca Scott',
+      'Rosca no Cabo',
+      'Tríceps Corda na Polia',
+      'Tríceps Francês',
+      'Paralela (Dips)',
+    ],
+    tags: ['Mundial', 'Divisão clássica', '5 dias'],
+    highlight:
+      'Rotina com foco em controle de movimento e volume para ombros e braços.',
+    planDays: [
+      {
+        label: 'Dia 1 — Peito',
+        exercises: [
+          { name: 'Supino com Halteres', sets: 4, reps: '8-12' },
+          { name: 'Supino Máquina (Chest Press)', sets: 4, reps: '10-12' },
+          { name: 'Crossover no Cabo', sets: 4, reps: '12-15' },
+          { name: 'Crucifixo no Peck-Deck', sets: 4, reps: '12' },
+        ],
+      },
+      {
+        label: 'Dia 2 — Costas',
+        exercises: [
+          { name: 'Puxada Neutra na Polia', sets: 4, reps: '10-12' },
+          { name: 'Remada Baixa', sets: 4, reps: '10' },
+          { name: 'Remada Unilateral no Cabo', sets: 4, reps: '12' },
+          { name: 'Pullover na Máquina', sets: 4, reps: '12-15' },
+        ],
+      },
+      {
+        label: 'Dia 3 — Ombros',
+        exercises: [
+          { name: 'Desenvolvimento no Smith', sets: 4, reps: '8-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '12-15' },
+          { name: 'Elevação Lateral no Cabo', sets: 4, reps: '15' },
+          { name: 'Peck-Deck Reverso', sets: 4, reps: '12-15' },
+        ],
+      },
+      {
+        label: 'Dia 4 — Pernas',
+        exercises: [
+          { name: 'Leg Press 45', sets: 4, reps: '10-15' },
+          { name: 'Agachamento Hack', sets: 4, reps: '10' },
+          { name: 'Cadeira Extensora', sets: 4, reps: '15' },
+          { name: 'Mesa Flexora', sets: 4, reps: '12' },
+          { name: 'Panturrilha em Pé', sets: 7, reps: '12-20' },
+        ],
+      },
+      {
+        label: 'Dia 5 — Braços',
+        exercises: [
+          { name: 'Rosca Alternada', sets: 4, reps: '10' },
+          { name: 'Rosca Scott', sets: 4, reps: '12' },
+          { name: 'Rosca no Cabo', sets: 4, reps: '12-15' },
+          { name: 'Tríceps Corda na Polia', sets: 4, reps: '12' },
+          { name: 'Tríceps Francês', sets: 4, reps: '12' },
+          { name: 'Paralela (Dips)', sets: 3, reps: 'falha' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'tom-platz-legs',
+    name: 'Tom Platz',
+    country: 'EUA',
+    era: 'Golden Era',
+    region: 'world',
+    focus: 'Especialização extrema de pernas com muito volume.',
+    split: [
+      'Dia de pernas (treino icônico e extremamente longo).',
+      'Peito + Costas',
+      'Ombros',
+      'Braços',
+    ],
+    keyMoves: [
+      'Agachamento Livre',
+      'Agachamento Hack',
+      'Cadeira Extensora',
+      'Leg Press 45',
+      'Sissy Squat',
+      'Mesa Flexora',
+      'Panturrilha em Pé',
+      'Supino Reto',
+      'Supino Inclinado',
+      'Crucifixo com Halteres',
+      'Barra Fixa',
+      'Remada Curvada',
+      'Desenvolvimento Militar',
+      'Elevação Lateral',
+      'Peck-Deck Reverso',
+      'Rosca Direta',
+      'Rosca Alternada',
+      'Tríceps Testa',
+      'Paralela (Dips)',
+    ],
+    tags: ['Mundial', 'Especialização', 'Pernas', 'Golden Era'],
+    special: true,
+    highlight:
+      'Agachamento profundo com altíssimo volume era o núcleo do treino de pernas.',
+    planDays: [
+      {
+        label: 'Dia de Pernas (icônico)',
+        exercises: [
+          { name: 'Agachamento Livre', sets: 8, reps: '20-30' },
+          { name: 'Agachamento Hack', sets: 5, reps: '10-15' },
+          { name: 'Cadeira Extensora', sets: 6, reps: '15-20' },
+          { name: 'Leg Press 45', sets: 5, reps: '20' },
+          { name: 'Sissy Squat', sets: 4, reps: 'falha' },
+          { name: 'Mesa Flexora', sets: 5, reps: '12-15' },
+          { name: 'Panturrilha em Pé', sets: 10, reps: '12-20' },
+        ],
+      },
+      {
+        label: 'Peito + Costas',
+        exercises: [
+          { name: 'Supino Reto', sets: 5, reps: '8-12' },
+          { name: 'Supino Inclinado', sets: 4, reps: '10' },
+          { name: 'Crucifixo com Halteres', sets: 4, reps: '12-15' },
+          { name: 'Barra Fixa', sets: 5, reps: 'falha' },
+          { name: 'Remada Curvada', sets: 5, reps: '8-12' },
+        ],
+      },
+      {
+        label: 'Ombros',
+        exercises: [
+          { name: 'Desenvolvimento Militar', sets: 5, reps: '6-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '12-15' },
+          { name: 'Peck-Deck Reverso', sets: 4, reps: '12' },
+        ],
+      },
+      {
+        label: 'Braços',
+        exercises: [
+          { name: 'Rosca Direta', sets: 5, reps: '8-12' },
+          { name: 'Rosca Alternada', sets: 4, reps: '10' },
+          { name: 'Tríceps Testa', sets: 5, reps: '8-12' },
+          { name: 'Paralela (Dips)', sets: 3, reps: 'falha' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ramon-dino',
+    name: 'Ramon Dino',
+    country: 'Brasil',
+    era: 'Classic Physique',
+    region: 'br',
+    focus:
+      'Periodização com ênfases alternadas em puxadas, remadas, peito e ombros.',
+    split: [
+      '1º treino: Costas + bíceps (ênfase em puxadas)',
+      '2º treino: Peito + ombro + tríceps (ênfase em peito)',
+      '3º treino: Pernas (ênfase em quadríceps)',
+      'Descanso',
+      '4º treino: Costas + bíceps (ênfase em remadas)',
+      '5º treino: Peito + ombro + tríceps (ênfase em ombro)',
+      '6º treino: Pernas (ênfase posterior e glúteo)',
+      'Descanso',
+    ],
+    keyMoves: [
+      'Barra Fixa',
+      'Puxada na Frente (Pulldown)',
+      'Remada Curvada',
+      'Remada Unilateral no Cabo',
+      'Pullover na Máquina',
+      'Supino com Halteres',
+      'Supino Máquina (Chest Press)',
+      'Crucifixo Inclinado',
+      'Crossover no Cabo',
+      'Abdominal Infra',
+      'Abdominal na Polia (Crunch no Cabo)',
+      'Desenvolvimento no Smith',
+      'Elevação Lateral',
+      'Elevação Lateral no Cabo',
+      'Peck-Deck Reverso',
+      'Agachamento Livre',
+      'Leg Press 45',
+      'Cadeira Extensora',
+      'Mesa Flexora',
+      'Panturrilha em Pé',
+      'Rosca Direta',
+      'Rosca Alternada',
+      'Rosca Scott',
+      'Tríceps Corda na Polia',
+      'Tríceps Francês',
+      'Paralela (Dips)',
+    ],
+    tags: ['Brasil', 'Classic Physique', 'Estética'],
+    highlight:
+      'Ênfase em dorsais largas e ombros cheios para manter linha clássica.',
+    planDays: [
+      {
+        label: 'Dia 1 — Costas',
+        exercises: [
+          { name: 'Barra Fixa', sets: 4, reps: 'falha' },
+          { name: 'Puxada na Frente (Pulldown)', sets: 4, reps: '10-12' },
+          { name: 'Remada Curvada', sets: 4, reps: '8-10' },
+          { name: 'Remada Unilateral no Cabo', sets: 4, reps: '12' },
+          { name: 'Pullover na Máquina', sets: 4, reps: '12-15' },
+        ],
+      },
+      {
+        label: 'Dia 2 — Peito + Abdômen',
+        exercises: [
+          { name: 'Supino com Halteres', sets: 4, reps: '8-12' },
+          { name: 'Supino Máquina (Chest Press)', sets: 4, reps: '10' },
+          { name: 'Crucifixo Inclinado', sets: 4, reps: '12-15' },
+          { name: 'Crossover no Cabo', sets: 4, reps: '15' },
+          { name: 'Abdominal Infra', sets: 4, reps: '15' },
+          { name: 'Abdominal na Polia (Crunch no Cabo)', sets: 4, reps: '15' },
+        ],
+      },
+      {
+        label: 'Dia 3 — Ombros',
+        exercises: [
+          { name: 'Desenvolvimento no Smith', sets: 4, reps: '8-10' },
+          { name: 'Elevação Lateral', sets: 5, reps: '12-15' },
+          { name: 'Elevação Lateral no Cabo', sets: 4, reps: '15' },
+          { name: 'Peck-Deck Reverso', sets: 4, reps: '12-15' },
+        ],
+      },
+      {
+        label: 'Dia 4 — Pernas',
+        exercises: [
+          { name: 'Agachamento Livre', sets: 4, reps: '8-12' },
+          { name: 'Leg Press 45', sets: 4, reps: '12-15' },
+          { name: 'Cadeira Extensora', sets: 4, reps: '15' },
+          { name: 'Mesa Flexora', sets: 4, reps: '12' },
+          { name: 'Panturrilha em Pé', sets: 8, reps: '12-20' },
+        ],
+      },
+      {
+        label: 'Dia 5 — Braços',
+        exercises: [
+          { name: 'Rosca Direta', sets: 4, reps: '8-10' },
+          { name: 'Rosca Alternada', sets: 4, reps: '10' },
+          { name: 'Rosca Scott', sets: 3, reps: '12' },
+          { name: 'Tríceps Corda na Polia', sets: 4, reps: '12' },
+          { name: 'Tríceps Francês', sets: 4, reps: '12' },
+          { name: 'Paralela (Dips)', sets: 3, reps: 'falha' },
+        ],
+      },
+    ],
+  },
+];
+
+const libraryState = {
+  query: '',
+  filter: 'all',
+};
+
+function findExerciseByName(name) {
+  if (!name || !Array.isArray(exercises)) return null;
+  const target = norm(name);
+  return (
+    exercises.find((exercise) => norm(exercise.name) === target) ||
+    exercises.find(
+      (exercise) =>
+        norm(exercise.name).includes(target) ||
+        target.includes(norm(exercise.name)),
+    ) ||
+    null
+  );
+}
+
+function buildLibraryExercise(moveName, fallbackId) {
+  const match = findExerciseByName(moveName);
+  const base = match || {};
+  return {
+    id: match?.id ?? `lib-${fallbackId}`,
+    name: match?.name || moveName,
+    muscle: match?.muscle || 'Geral',
+    equipment: match?.equipment || 'Livre',
+    difficulty: match?.difficulty || 'Intermediário',
+    sets: 3,
+    reps: '8-12',
+  };
+}
+
+function buildLibraryPlanDays(item) {
+  if (!Array.isArray(item.planDays) || !item.planDays.length) return null;
+  return item.planDays.map((day, dayIndex) => ({
+    label: day.label || `Dia ${dayIndex + 1}`,
+    exercises: (day.exercises || []).map((exercise, index) => {
+      const match = findExerciseByName(exercise.name);
+      return {
+        id: match?.id ?? `lib-${item.id}-${dayIndex + 1}-${index + 1}`,
+        name: match?.name || exercise.name,
+        muscle: match?.muscle || 'Geral',
+        equipment: match?.equipment || 'Livre',
+        difficulty: match?.difficulty || 'Intermediário',
+        sets: Number.isFinite(exercise.sets) ? exercise.sets : 3,
+        reps: exercise.reps || '8-12',
+      };
+    }),
+  }));
+}
+
+function buildLibraryDays(item) {
+  const splitLines = Array.isArray(item.split)
+    ? item.split
+    : item.split
+      ? [item.split]
+      : [];
+  const labels = splitLines
+    .map((line) => {
+      const parts = String(line).split(':');
+      return parts.length > 1 ? parts.slice(1).join(':').trim() : line.trim();
+    })
+    .filter(Boolean);
+  const dayCount = Math.max(1, labels.length);
+  const days = Array.from({ length: dayCount }, (_, index) => ({
+    label: labels[index] || `Dia ${index + 1}`,
+    exercises: [],
+  }));
+  const moves = item.keyMoves || [];
+  moves.forEach((move, index) => {
+    const day = days[index % dayCount];
+    day.exercises.push(buildLibraryExercise(move, `${item.id}-${index + 1}`));
+  });
+  return days;
+}
+
+function createLibraryWorkout(item) {
+  const detailedDays = buildLibraryPlanDays(item);
+  const days = detailedDays || buildLibraryDays(item);
+  const plan = {
+    id: createUuid(),
+    name: `Biblioteca — ${item.name}`,
+    createdAt: new Date().toISOString(),
+    config: {
+      division: item.tags?.[0] || 'Biblioteca',
+      daysPerWeek: days.length,
+      volume: 'medium',
+      exerciseSource: 'library',
+    },
+    days,
+    metrics: {
+      algorithm: 'Library',
+      timeMs: 0,
+      equipmentSwitches: 0,
+      volumeTotal: days.reduce(
+        (sum, day) =>
+          sum +
+          (day.exercises || []).reduce(
+            (acc, exercise) => acc + (Number(exercise.sets) || 0),
+            0,
+          ),
+        0,
+      ),
+    },
+  };
+  return normalizeWorkout(plan);
+}
+
+function applyLibrarySelection(plan) {
+  if (!plan || !Array.isArray(plan.days)) return;
+  const ids = plan.days
+    .flatMap((day) => day.exercises || [])
+    .map((exercise) => exercise.id)
+    .filter((id) => Number.isFinite(Number(id)));
+  if (!ids.length) return;
+  selectedExercises = normalizeSelectedExercises([
+    ...selectedExercises,
+    ...ids,
+  ]);
+  saveSelectedExercises();
+  updateSelectedCount();
+  search();
+}
 
 const workoutState = {
   currentStep: 1,
@@ -89,6 +1026,12 @@ const workoutState = {
   },
 };
 
+const sessionState = {
+  workoutId: '',
+  dayIndex: 0,
+  date: '',
+};
+
 let lastExportBlob = null;
 let lastExportFilename = '';
 let activeWorkoutId = null;
@@ -100,6 +1043,39 @@ const workoutDragState = {
   pointerId: null,
   hoveredRow: null,
 };
+
+function getAllowedDaysForDivision(division) {
+  return DIVISION_DAY_RULES[division] || DIVISION_DAY_RULES['Sem Preferência'];
+}
+
+function setSelectedDayOption(value) {
+  if (!daysOptions) return;
+  const allowedDays = getAllowedDaysForDivision(workoutState.config.division);
+  if (!allowedDays.includes(value)) return;
+  daysOptions
+    .querySelectorAll('button')
+    .forEach((button) => button.classList.remove('is-selected'));
+  const target = daysOptions.querySelector(`button[data-value="${value}"]`);
+  if (target) target.classList.add('is-selected');
+  workoutState.config.daysPerWeek = value;
+}
+
+function updateDaysOptionsForDivision(division) {
+  if (!daysOptions) return;
+  const allowedDays = getAllowedDaysForDivision(division);
+  daysOptions.querySelectorAll('button').forEach((button) => {
+    const value = Number(button.dataset.value);
+    const isAllowed = allowedDays.includes(value);
+    button.disabled = !isAllowed;
+    if (!isAllowed) {
+      button.classList.remove('is-selected');
+    }
+  });
+
+  if (!allowedDays.includes(workoutState.config.daysPerWeek)) {
+    setSelectedDayOption(allowedDays[0]);
+  }
+}
 
 /* EVENT BINDINGS PERFIL & AVALIAÇÃO */
 document
@@ -127,6 +1103,30 @@ if (evaluationList) {
 if (profileForm) {
   profileForm.addEventListener('submit', handleProfileSubmit);
   populateProfileForm(profileData);
+}
+
+
+if (searchInput) {
+  searchInput.addEventListener('input', () => search());
+}
+
+if (muscleSelect) {
+  muscleSelect.addEventListener('change', () => search());
+}
+
+if (resultsContainer) {
+  resultsContainer.addEventListener('click', (event) => {
+    const card = event.target.closest('.exercise-card');
+    if (!card) return;
+    toggleExercise(Number(card.dataset.exerciseId));
+  });
+  resultsContainer.addEventListener('keydown', (event) => {
+    const card = event.target.closest('.exercise-card');
+    if (!card) return;
+    if (!['Enter', ' ', 'Spacebar'].includes(event.key)) return;
+    event.preventDefault();
+    toggleExercise(Number(card.dataset.exerciseId));
+  });
 }
 
 document
@@ -163,8 +1163,11 @@ document.addEventListener('keydown', (event) => {
   if (evaluationModal?.classList.contains('is-active')) closeEvaluationModal();
   if (clearDataModal?.classList.contains('is-active')) closeClearModal();
   if (exportModal?.classList.contains('is-active')) closeExportModal();
+  if (workoutModal?.classList.contains('is-active')) closeWorkoutModal();
   if (deleteWorkoutModal?.classList.contains('is-active'))
     closeDeleteWorkoutModal();
+  if (deleteAccountModal?.classList.contains('is-active'))
+    closeDeleteAccountModal();
 });
 
 document
@@ -196,6 +1199,79 @@ if (deleteWorkoutModal) {
 if (confirmDeleteWorkoutBtn) {
   confirmDeleteWorkoutBtn.addEventListener('click', confirmWorkoutDeletion);
 }
+
+closeDeleteAccountButtons.forEach((button) =>
+  button.addEventListener('click', closeDeleteAccountModal),
+);
+
+if (deleteAccountModal) {
+  deleteAccountModal.addEventListener('click', (event) => {
+    if (event.target === deleteAccountModal) closeDeleteAccountModal();
+  });
+}
+
+if (deleteAccountBtn) {
+  deleteAccountBtn.addEventListener('click', openDeleteAccountModal);
+}
+
+if (deleteAccountConfirmInput) {
+  deleteAccountConfirmInput.addEventListener(
+    'input',
+    updateDeleteAccountValidation,
+  );
+}
+
+if (confirmDeleteAccountBtn) {
+  confirmDeleteAccountBtn.addEventListener(
+    'click',
+    handleAccountDeletion,
+  );
+}
+
+if (authTrigger) {
+  authTrigger.addEventListener('click', () => {
+    if (cloudSyncState.user) {
+      handleAuthLogout();
+    } else {
+      navigateTo('login');
+    }
+  });
+}
+
+authLogoutButtons.forEach((button) =>
+  button.addEventListener('click', () => {
+    if (cloudSyncState.user) {
+      handleAuthLogout();
+    } else {
+      navigateTo('login');
+    }
+  }),
+);
+
+if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
+if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
+
+authSwitchButtons.forEach((button) =>
+  button.addEventListener('click', () =>
+    switchAuthView(button.dataset.authSwitch || 'login'),
+  ),
+);
+
+if (authResetLink) {
+  authResetLink.addEventListener('click', handlePasswordReset);
+}
+
+if (authResendButton) {
+  authResendButton.addEventListener('click', handleResendConfirmation);
+}
+
+document
+  .querySelectorAll('[data-toggle-password]')
+  .forEach((button) =>
+    button.addEventListener('click', () =>
+      togglePasswordVisibility(button),
+    ),
+  );
 
 if (importTrigger && importInput) {
   importTrigger.addEventListener('click', () => importInput.click());
@@ -234,6 +1310,11 @@ if (workoutDetailsCard) {
     const editWorkoutBtn = event.target.closest('[data-edit-workout]');
     if (editWorkoutBtn) {
       handleWorkoutRename();
+      return;
+    }
+    const exportWorkoutBtn = event.target.closest('[data-export-workout]');
+    if (exportWorkoutBtn) {
+      handleWorkoutExportPdf();
       return;
     }
     const deleteWorkoutBtn = event.target.closest('[data-delete-workout]');
@@ -302,15 +1383,9 @@ if (workoutDetailsBody) {
 
 if (daysOptions) {
   daysOptions.querySelectorAll('button').forEach((button) => {
-    if (Number(button.dataset.value) === workoutState.config.daysPerWeek) {
-      button.classList.add('is-selected');
-    }
     button.addEventListener('click', () => {
-      daysOptions
-        .querySelectorAll('button')
-        .forEach((b) => b.classList.remove('is-selected'));
-      button.classList.add('is-selected');
-      workoutState.config.daysPerWeek = Number(button.dataset.value);
+      if (button.disabled) return;
+      setSelectedDayOption(Number(button.dataset.value));
     });
   });
 }
@@ -323,6 +1398,9 @@ if (daysOptions) {
     }
     input.addEventListener('change', () => {
       workoutState.config[group] = input.value;
+      if (group === 'division') {
+        updateDaysOptionsForDivision(input.value);
+      }
       if (group === 'exerciseSource') {
         updateRequirementSummary();
       }
@@ -330,43 +1408,69 @@ if (daysOptions) {
   });
 });
 
+updateDaysOptionsForDivision(workoutState.config.division);
+setSelectedDayOption(workoutState.config.daysPerWeek);
+
 renderEvaluationsUI();
 
 /* LOCALSTORAGE */
+function normalizeSelectedExercises(list) {
+  if (!Array.isArray(list)) return [];
+  const validIds = new Set(exercises.map((exercise) => exercise.id));
+  const unique = new Set();
+  const normalized = [];
+  list.forEach((id) => {
+    const parsed = Number(id);
+    if (!Number.isFinite(parsed) || !validIds.has(parsed)) return;
+    if (unique.has(parsed)) return;
+    unique.add(parsed);
+    normalized.push(parsed);
+  });
+  return normalized;
+}
+
 function saveSelectedExercises() {
-  localStorage.setItem(
-    'nushape_selected_exercises',
-    JSON.stringify(selectedExercises),
-  );
+  storageService.setJSON(SELECTED_EXERCISES_STORAGE_KEY, selectedExercises);
+  touchStateMeta();
+  scheduleCloudSync('silent');
 }
 
 function loadSelectedExercises() {
-  const saved = localStorage.getItem('nushape_selected_exercises');
-  if (saved) {
-    try {
-      selectedExercises = JSON.parse(saved);
-    } catch (e) {
-      selectedExercises = [];
-    }
-  }
+  const saved = storageService.getJSON(SELECTED_EXERCISES_STORAGE_KEY, []);
+  selectedExercises = normalizeSelectedExercises(saved);
 }
 
 /* NAVEGAÇÃO */
 function navigateTo(page) {
+  const isLogged = Boolean(cloudSyncState.user);
+  let targetPage = VALID_PAGES.includes(page) ? page : 'dashboard';
+  if (!isLogged && targetPage !== 'login') targetPage = 'login';
+  if (isLogged && targetPage === 'login') targetPage = 'dashboard';
   document
     .querySelectorAll('.page')
     .forEach((p) => p.classList.remove('active'));
-  const target = document.getElementById(`page-${page}`);
+  const target = document.getElementById(`page-${targetPage}`);
   if (target) target.classList.add('active');
+
+  setAuthScreen(targetPage === 'login');
 
   document.querySelectorAll('.sidebar-item[data-page]').forEach((item) => {
     item.classList.remove('active');
-    if (item.dataset.page === page) item.classList.add('active');
+    if (item.dataset.page === targetPage) item.classList.add('active');
   });
 
-  if (page === 'treinos') updateTreinosPage();
-  if (page === 'progresso') renderEvaluationsUI();
-  if (page === 'dados') refreshRadioChips();
+  if (targetPage === 'dashboard') renderDashboard();
+  if (targetPage === 'sessao') renderSessionUI();
+  if (targetPage === 'biblioteca') renderLibrary();
+  if (targetPage === 'treinos') updateTreinosPage();
+  if (targetPage === 'progresso') {
+    renderEvaluationsUI();
+    renderStrengthSection();
+  }
+  if (targetPage === 'dados') {
+    refreshRadioChips();
+    renderProfileSummary();
+  }
 
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.sidebar-overlay');
@@ -375,7 +1479,7 @@ function navigateTo(page) {
   overlay && overlay.classList.remove('active');
   toggle && toggle.classList.remove('active');
 
-  saveActivePage(page);
+  if (targetPage !== 'login') saveActivePage(targetPage);
 }
 
 function updateTreinosPage() {
@@ -384,16 +1488,836 @@ function updateTreinosPage() {
 
   renderWorkoutCards();
   updateRequirementSummary();
+  renderDashboard();
+  renderSessionUI();
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function getFirstName(name = '') {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  return trimmed.split(' ')[0];
+}
+
+function getLatestWorkout() {
+  if (!workouts.length) return null;
+  return workouts.reduce((latest, current) => {
+    if (!latest) return current;
+    const latestTime = new Date(latest.createdAt || 0).getTime();
+    const currentTime = new Date(current.createdAt || 0).getTime();
+    return currentTime > latestTime ? current : latest;
+  }, null);
+}
+
+function renderDashboardMetric(label, value) {
+  const display =
+    typeof value === 'number' && Number.isFinite(value)
+      ? formatNumber(value, 0)
+      : value || '--';
+  return `
+    <div>
+      <span class="label">${label}</span>
+      <strong>${display}</strong>
+    </div>
+  `;
+}
+
+function formatProfileValue(value) {
+  if (!value) return '--';
+  const text = String(value);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function renderDashboard() {
+  if (!dashboardGreeting) return;
+
+  const name = getFirstName(profileData?.name);
+  const greeting = getGreeting();
+  dashboardGreeting.textContent = name
+    ? `${greeting}, ${name}!`
+    : `${greeting}!`;
+
+  if (dashboardSubtext) {
+    if (!workouts.length) {
+      dashboardSubtext.textContent =
+        'Comece criando seu primeiro treino e selecione os exercícios que você mais gosta.';
+    } else {
+      dashboardSubtext.textContent = `Você tem ${workouts.length} treino${
+        workouts.length !== 1 ? 's' : ''
+      } salvos e ${selectedExercises.length} exercício${
+        selectedExercises.length !== 1 ? 's' : ''
+      } selecionado${selectedExercises.length !== 1 ? 's' : ''}.`;
+    }
+  }
+
+  if (dashWorkoutsCount) dashWorkoutsCount.textContent = workouts.length;
+  if (dashSelectedCount)
+    dashSelectedCount.textContent = selectedExercises.length;
+  if (dashEvaluationCount) dashEvaluationCount.textContent = evaluations.length;
+
+  const latestWorkout = getLatestWorkout();
+  const lastVolume =
+    latestWorkout && Number.isFinite(latestWorkout.metrics?.volumeTotal)
+      ? latestWorkout.metrics.volumeTotal
+      : null;
+  if (dashLastVolume) dashLastVolume.textContent = lastVolume ?? '--';
+
+  if (dashboardLastWorkout && dashboardLastWorkoutEmpty) {
+    if (!latestWorkout) {
+      dashboardLastWorkout.innerHTML = '';
+      dashboardLastWorkoutEmpty.style.display = 'block';
+    } else {
+      dashboardLastWorkoutEmpty.style.display = 'none';
+      dashboardLastWorkout.innerHTML = `
+        <div class="last-eval-header">
+          <div>
+            <p class="last-eval-date">${latestWorkout.name}</p>
+            <p class="last-eval-sub">Criado em ${formatDate(
+              latestWorkout.createdAt,
+            )}</p>
+          </div>
+          <span class="chip chip-positive">${
+            latestWorkout.config?.division || 'Sem preferência'
+          }</span>
+        </div>
+      `;
+    }
+  }
+
+  if (dashboardNextSteps) {
+    const steps = [];
+    const missingFields = [
+      profileData?.name ? null : 'nome',
+      profileData?.gender ? null : 'gênero',
+      profileData?.biotype ? null : 'biotipo',
+      profileData?.birthdate ? null : 'data de nascimento',
+      profileData?.email ? null : 'e-mail',
+    ].filter(Boolean);
+
+    if (!workouts.length)
+      steps.push({
+        title: 'Criar seu primeiro treino',
+        hint: 'Use o assistente inteligente para montar um plano completo.',
+      });
+    if (selectedExercises.length < 5)
+      steps.push({
+        title: 'Selecionar exercícios base',
+        hint: 'Deixe seus preferidos marcados para treinos mais assertivos.',
+      });
+    if (!evaluations.length)
+      steps.push({
+        title: 'Registrar avaliação física',
+        hint: 'Acompanhe medidas e evolução do shape.',
+      });
+    if (missingFields.length)
+      steps.push({
+        title: 'Completar perfil',
+        hint: `${missingFields.length} campo(s) pendente(s) no seu cadastro.`,
+      });
+
+    if (!steps.length) {
+      steps.push({
+        title: 'Tudo em dia!',
+        hint: 'Continue ajustando seus treinos e registrando avaliações.',
+      });
+    }
+
+    dashboardNextSteps.innerHTML = steps
+      .map(
+        (step) =>
+          `<li><span>${step.title}</span><small>${step.hint}</small></li>`,
+      )
+      .join('');
+  }
+
+  if (dashboardProfileSummary) {
+    const items = [
+      { label: 'Nome', value: profileData?.name || '--' },
+      { label: 'Gênero', value: formatProfileValue(profileData?.gender) },
+      { label: 'Biotipo', value: formatProfileValue(profileData?.biotype) },
+      {
+        label: 'Nascimento',
+        value: profileData?.birthdate
+          ? formatDate(profileData.birthdate)
+          : '--',
+      },
+      {
+        label: 'Contato',
+        value: profileData?.phone || profileData?.email || '--',
+      },
+    ];
+    dashboardProfileSummary.innerHTML = items
+      .map((item) => renderDashboardMetric(item.label, item.value))
+      .join('');
+  }
+
+  if (dashboardEvaluationSummary && dashboardEvaluationEmpty) {
+    if (!evaluations.length) {
+      dashboardEvaluationSummary.innerHTML = '';
+      dashboardEvaluationEmpty.style.display = 'block';
+    } else {
+      dashboardEvaluationEmpty.style.display = 'none';
+      const latest = evaluations[0];
+      dashboardEvaluationSummary.innerHTML = `
+        ${renderDashboardMetric('Data', formatDate(latest.date))}
+        ${renderSummaryMetric('Peso', latest.weight, 'kg', 1)}
+        ${renderSummaryMetric('% Gordura', latest.bodyFat, '%', 1)}
+        ${renderSummaryMetric('Cintura', latest.waist, 'cm')}
+        ${renderSummaryMetric('Altura', latest.height, 'cm')}
+      `;
+    }
+  }
+
+  renderDashboardChart();
+  renderProfileSummary();
+}
+
+function renderProfileSummary() {
+  if (
+    !profileSyncStatus &&
+    !profileSyncTime &&
+    !profileSyncEmail
+  ) {
+    return;
+  }
+  const isSyncing =
+    cloudSyncState.syncing ||
+    workoutCloudSync.syncing ||
+    evaluationCloudSync.syncing;
+
+  if (profileSyncStatus) {
+    profileSyncStatus.classList.remove('chip-positive', 'chip-soon');
+    if (!cloudSyncState.user) {
+      profileSyncStatus.textContent = 'Desconectado';
+      profileSyncStatus.classList.add('chip-soon');
+    } else if (isSyncing) {
+      profileSyncStatus.textContent = 'Sincronizando';
+      profileSyncStatus.classList.add('chip-soon');
+    } else {
+      profileSyncStatus.textContent = 'Sincronizado';
+      profileSyncStatus.classList.add('chip-positive');
+    }
+  }
+
+  if (profileSyncTime) {
+    const stamps = [
+      cloudSyncState.lastSyncAt,
+      workoutCloudSync.lastSyncAt,
+      evaluationCloudSync.lastSyncAt,
+      stateMeta?.updatedAt,
+    ].filter(Boolean);
+    const stamp =
+      stamps
+        .map((value) => ({ value, time: parseTimestamp(value) }))
+        .sort((a, b) => b.time - a.time)[0]?.value || '';
+    profileSyncTime.textContent = stamp ? formatDateTime(stamp) : '—';
+  }
+
+  if (profileSyncEmail) {
+    profileSyncEmail.textContent =
+      cloudSyncState.user?.email || profileData?.email || '—';
+  }
+}
+
+function hydrateProfileFromAuth() {
+  if (!cloudSyncState.user) return;
+  const updates = {};
+  const nameFromAuth = cloudSyncState.user?.user_metadata?.name;
+  const emailFromAuth = cloudSyncState.user?.email;
+
+  if (!profileData?.name && nameFromAuth) updates.name = nameFromAuth;
+  if (!profileData?.email && emailFromAuth) updates.email = emailFromAuth;
+
+  if (Object.keys(updates).length) {
+    profileData = { ...profileData, ...updates };
+    saveProfileToStorage(profileData);
+    populateProfileForm(profileData);
+  } else {
+    populateProfileForm(profileData);
+  }
+}
+
+function renderDashboardChart() {
+  if (!dashboardChartCanvas || !dashboardChartArea || !dashboardChartEmpty) {
+    return;
+  }
+  if (!window.Chart) {
+    dashboardChartArea.style.display = 'none';
+    dashboardChartEmpty.style.display = 'block';
+    return;
+  }
+
+  if (dashboardChartInstance) {
+    dashboardChartInstance.destroy();
+    dashboardChartInstance = null;
+  }
+
+  if (!evaluations.length) {
+    dashboardChartArea.style.display = 'none';
+    dashboardChartEmpty.style.display = 'block';
+    return;
+  }
+
+  const sorted = [...evaluations].sort((a, b) => {
+    const aTime = new Date(a.date || 0).getTime();
+    const bTime = new Date(b.date || 0).getTime();
+    return aTime - bTime;
+  });
+
+  const labels = sorted.map((entry) => formatDate(entry.date));
+  const weightData = sorted.map((entry) =>
+    isValidNumber(entry.weight) ? entry.weight : null,
+  );
+  const bodyFatData = sorted.map((entry) =>
+    isValidNumber(entry.bodyFat) ? entry.bodyFat : null,
+  );
+
+  dashboardChartArea.style.display = 'block';
+  dashboardChartEmpty.style.display = 'none';
+
+  dashboardChartInstance = new window.Chart(dashboardChartCanvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Peso (kg)',
+          data: weightData,
+          borderColor: '#111827',
+          backgroundColor: 'rgba(17, 24, 39, 0.08)',
+          borderWidth: 2,
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3,
+        },
+        {
+          label: '% Gordura',
+          data: bodyFatData,
+          borderColor: '#0d9e6e',
+          backgroundColor: 'rgba(13, 158, 110, 0.12)',
+          borderWidth: 2,
+          tension: 0.35,
+          fill: false,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(15, 23, 42, 0.08)',
+          },
+          ticks: {
+            color: '#64748b',
+            font: { size: 11 },
+          },
+        },
+        y: {
+          grid: {
+            color: 'rgba(15, 23, 42, 0.08)',
+          },
+          ticks: {
+            color: '#64748b',
+            font: { size: 11 },
+          },
+        },
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#111827',
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#111827',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          padding: 10,
+        },
+      },
+    },
+  });
+}
+
+function renderSessionUI() {
+  if (!sessionWorkoutSelect || !sessionDaySelect || !sessionDateInput)
+    return;
+
+  if (!workouts.length) {
+    if (sessionEmpty) sessionEmpty.style.display = 'block';
+    if (sessionContent) sessionContent.style.display = 'none';
+    return;
+  }
+
+  if (sessionEmpty) sessionEmpty.style.display = 'none';
+  if (sessionContent) sessionContent.style.display = 'block';
+
+  sessionWorkoutSelect.innerHTML = workouts
+    .map(
+      (workout) =>
+        `<option value="${workout.id}">${workout.name}</option>`,
+    )
+    .join('');
+
+  if (!sessionState.workoutId || !workouts.find((w) => w.id === sessionState.workoutId)) {
+    sessionState.workoutId = workouts[0].id;
+  }
+
+  sessionWorkoutSelect.value = sessionState.workoutId;
+  const workout = workouts.find((w) => w.id === sessionState.workoutId);
+  if (!workout) return;
+
+  sessionDaySelect.innerHTML = workout.days
+    .map(
+      (day, index) => `<option value="${index}">${day.label}</option>`,
+    )
+    .join('');
+
+  if (sessionState.dayIndex >= workout.days.length) {
+    sessionState.dayIndex = 0;
+  }
+  sessionDaySelect.value = String(sessionState.dayIndex);
+
+  if (!sessionState.date) {
+    sessionState.date = getTodayInSaoPaulo();
+  }
+  sessionDateInput.value = sessionState.date;
+
+  if (sessionSummary) {
+    sessionSummary.textContent = `${workout.name} • ${workout.days.length} dia(s) • ${workout.config?.division || 'Sem preferência'}`;
+  }
+
+  const day = workout.days[sessionState.dayIndex];
+  renderSessionExercises(day);
+  renderProfileSummary();
+}
+
+function renderSessionExercises(day) {
+  if (!sessionExercisesContainer) return;
+  if (!day || !Array.isArray(day.exercises)) {
+    sessionExercisesContainer.innerHTML = '';
+    return;
+  }
+
+  sessionExercisesContainer.innerHTML = day.exercises
+    .map(
+      (exercise, index) => `
+        <div class="session-exercise-row" data-session-exercise="${index}">
+          <div class="session-exercise-info">
+            <strong>${exercise.name}</strong>
+            <span>${exercise.muscle} • ${exercise.equipment}</span>
+          </div>
+          <div class="session-exercise-controls">
+            <label class="exercise-field">
+              <span>Carga (kg)</span>
+              <input type="number" min="0" step="0.5" data-session-weight value="">
+            </label>
+            <label class="exercise-field">
+              <span>Reps</span>
+              <input type="number" min="0" step="1" data-session-reps value="">
+            </label>
+          </div>
+        </div>
+      `,
+    )
+    .join('');
+}
+
+function handleSessionSave() {
+  if (!sessionWorkoutSelect || !sessionDaySelect || !sessionDateInput)
+    return;
+  const workout = workouts.find((w) => w.id === sessionState.workoutId);
+  if (!workout) return;
+  const day = workout.days[sessionState.dayIndex];
+  if (!day) return;
+
+  const dateValue = sessionDateInput.value || getTodayInSaoPaulo();
+  const entries = [];
+
+  day.exercises.forEach((exercise, index) => {
+    const row = sessionExercisesContainer?.querySelector(
+      `[data-session-exercise="${index}"]`,
+    );
+    if (!row) return;
+    const weightInput = row.querySelector('[data-session-weight]');
+    const repsInput = row.querySelector('[data-session-reps]');
+    const weight = toNumber(weightInput?.value);
+    const reps = toNumber(repsInput?.value);
+    if (!Number.isFinite(weight) || !Number.isFinite(reps)) return;
+
+    entries.push({
+      id: `${Date.now()}-${index}`,
+      date: dateValue,
+      workoutId: workout.id,
+      workoutName: workout.name,
+      dayIndex: sessionState.dayIndex,
+      dayLabel: day.label,
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      weight,
+      reps,
+    });
+  });
+
+  if (!entries.length) {
+    if (sessionFeedback) {
+      sessionFeedback.textContent =
+        'Preencha carga e repetições para pelo menos um exercício.';
+      sessionFeedback.classList.add('is-visible');
+    }
+    return;
+  }
+
+  sessionLogs = [...entries, ...sessionLogs];
+  saveSessionLogsToStorage(sessionLogs);
+  renderStrengthSection();
+  if (sessionFeedback) {
+    sessionFeedback.textContent = 'Sessão registrada com sucesso!';
+    sessionFeedback.classList.add('is-visible');
+    clearTimeout(sessionFeedback._timeout);
+    sessionFeedback._timeout = setTimeout(
+      () => sessionFeedback.classList.remove('is-visible'),
+      3200,
+    );
+  }
+}
+
+function renderStrengthSection() {
+  if (!strengthExerciseSelect || !strengthChartArea || !strengthChartEmpty)
+    return;
+
+  const exerciseNames = Array.from(
+    new Set(sessionLogs.map((entry) => entry.exerciseName).filter(Boolean)),
+  );
+
+  strengthExerciseSelect.innerHTML = exerciseNames
+    .map((name) => `<option value="${name}">${name}</option>`)
+    .join('');
+
+  if (!exerciseNames.length) {
+    strengthChartArea.style.display = 'none';
+    strengthChartEmpty.style.display = 'block';
+    return;
+  }
+
+  if (!strengthExerciseSelect.value) {
+    strengthExerciseSelect.value = exerciseNames[0];
+  }
+
+  strengthChartArea.style.display = 'block';
+  strengthChartEmpty.style.display = 'none';
+  if (strengthChartMode && !strengthChartState.mode) {
+    strengthChartState.mode = 'weight';
+  }
+  renderStrengthChart(strengthExerciseSelect.value);
+}
+
+function renderStrengthChart(exerciseName) {
+  if (!strengthChartCanvas || !window.Chart) return;
+
+  const filtered = sessionLogs.filter(
+    (entry) => entry.exerciseName === exerciseName,
+  );
+
+  if (!filtered.length) {
+    strengthChartArea.style.display = 'none';
+    strengthChartEmpty.style.display = 'block';
+    return;
+  }
+
+  const byDate = new Map();
+  filtered.forEach((entry) => {
+    const dateKey = entry.date || '';
+    if (!dateKey) return;
+    const current = byDate.get(dateKey) || {
+      weightSum: 0,
+      repsSum: 0,
+      count: 0,
+    };
+    current.weightSum += Number(entry.weight) || 0;
+    current.repsSum += Number(entry.reps) || 0;
+    current.count += 1;
+    byDate.set(dateKey, current);
+  });
+
+  const series = Array.from(byDate.entries())
+    .map(([date, stats]) => ({
+      date,
+      weight: stats.count ? stats.weightSum / stats.count : 0,
+      reps: stats.count ? stats.repsSum / stats.count : 0,
+    }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const labels = series.map((item) => formatDate(item.date));
+  const weightData = series.map((item) => Number(item.weight.toFixed(2)));
+  const repsData = series.map((item) => Number(item.reps.toFixed(1)));
+  const strengthData = series.map((item) =>
+    Number((item.weight * item.reps).toFixed(1)),
+  );
+
+  if (strengthChartInstance) {
+    strengthChartInstance.destroy();
+    strengthChartInstance = null;
+  }
+
+  const datasets = [];
+  if (strengthChartState.mode === 'weight') {
+    datasets.push({
+      label: 'Carga (kg)',
+      data: weightData,
+      borderColor: '#0d9e6e',
+      backgroundColor: 'rgba(13, 158, 110, 0.12)',
+      borderWidth: 2,
+      tension: 0.35,
+      fill: true,
+      yAxisID: 'yPrimary',
+    });
+  }
+  if (strengthChartState.mode === 'strength') {
+    datasets.push({
+      label: 'Força (peso x reps)',
+      data: strengthData,
+      borderColor: '#111827',
+      backgroundColor: 'rgba(17, 24, 39, 0.08)',
+      borderWidth: 2,
+      tension: 0.35,
+      fill: true,
+      yAxisID: 'yPrimary',
+    });
+  }
+
+  strengthChartInstance = new window.Chart(strengthChartCanvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: 'Tempo',
+            color: '#64748b',
+          },
+          grid: { color: 'rgba(15, 23, 42, 0.08)' },
+          ticks: { color: '#64748b', font: { size: 11 } },
+        },
+        yPrimary: {
+          title: {
+            display: true,
+            text:
+              strengthChartState.mode === 'strength'
+                ? 'Força (peso x reps)'
+                : 'Carga (kg)',
+            color: '#64748b',
+          },
+          grid: { color: 'rgba(15, 23, 42, 0.08)' },
+          ticks: { color: '#64748b', font: { size: 11 } },
+        },
+      },
+      plugins: {
+        legend: {
+          display: false,
+          position: 'bottom',
+          labels: {
+            color: '#111827',
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#111827',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          callbacks: {
+            label(context) {
+              const label = context.dataset.label || '';
+              const value = context.parsed?.y ?? '';
+              return `${label}: ${value}`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function getLibraryInitials(name = '') {
+  const parts = String(name || '')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+  if (!parts.length) return '';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function buildLibraryCard(item) {
+  const splitLines = Array.isArray(item.split) ? item.split : [item.split];
+  const focusLines = Array.isArray(item.focus) ? item.focus : [item.focus];
+  const tagList = item.tags || [];
+  const exercises = item.keyMoves || [];
+
+  return `
+    <article class="library-card">
+      <div class="library-card-header">
+        <span class="library-avatar">${getLibraryInitials(item.name)}</span>
+        <div class="library-title">
+          <h3>${item.name}</h3>
+          <p>${item.era} • ${item.country}</p>
+        </div>
+      </div>
+      <div class="library-tags">
+        ${tagList.map((tag) => `<span class="library-tag">${tag}</span>`).join('')}
+      </div>
+      <div class="library-section">
+        <div class="library-section-title">Divisão</div>
+        <div class="library-lines">
+          ${splitLines.map((line) => `<div>${line}</div>`).join('')}
+        </div>
+      </div>
+      <div class="library-section">
+        <div class="library-section-title">Foco</div>
+        <div class="library-lines">
+          ${focusLines.map((line) => `<div>${line}</div>`).join('')}
+        </div>
+      </div>
+      <div class="library-section">
+        <div class="library-section-title">Exercícios-chave</div>
+        <div class="library-exercises">
+          ${exercises.map((exercise) => `<span class="library-chip">${exercise}</span>`).join('')}
+        </div>
+      </div>
+      <div class="library-actions">
+        <button type="button" class="button-primary button-primary--sm" data-library-add="${item.id}">Adicionar aos meus treinos</button>
+      </div>
+    </article>
+  `;
+}
+
+function buildFeaturedCard(item) {
+  const splitLines = Array.isArray(item.split) ? item.split : [item.split];
+  const focusLines = Array.isArray(item.focus) ? item.focus : [item.focus];
+  const exercises = item.keyMoves || [];
+
+  return `
+    <article class="library-featured-card">
+      <div>
+        <div class="library-card-header">
+          <span class="library-avatar">${getLibraryInitials(item.name)}</span>
+          <div class="library-title">
+            <h3>${item.name}</h3>
+            <p>${item.era} • ${item.country}</p>
+          </div>
+        </div>
+        <div class="library-tags">
+          ${(item.tags || []).map((tag) => `<span class="library-tag">${tag}</span>`).join('')}
+        </div>
+        <div class="library-section">
+          <div class="library-section-title">Divisão</div>
+          <div class="library-lines">
+            ${splitLines.map((line) => `<div>${line}</div>`).join('')}
+          </div>
+        </div>
+        <div class="library-section">
+          <div class="library-section-title">Foco</div>
+          <div class="library-lines">
+            ${focusLines.map((line) => `<div>${line}</div>`).join('')}
+          </div>
+        </div>
+        <div class="library-section">
+          <div class="library-section-title">Exercícios-chave</div>
+          <div class="library-exercises">
+            ${exercises.map((exercise) => `<span class="library-chip">${exercise}</span>`).join('')}
+          </div>
+        </div>
+        <div class="library-actions">
+          <button type="button" class="button-primary button-primary--sm" data-library-add="${item.id}">Adicionar aos meus treinos</button>
+        </div>
+      </div>
+      <div class="library-highlight">
+        <p>${item.highlight || 'Treino destacado da biblioteca.'}</p>
+      </div>
+    </article>
+  `;
+}
+
+function filterLibraryItems(items) {
+  const query = norm(libraryState.query || '');
+  const filter = libraryState.filter;
+  return items.filter((item) => {
+    if (filter === 'world' && item.region !== 'world') return false;
+    if (filter === 'br' && item.region !== 'br') return false;
+    if (filter === 'special' && !item.special) return false;
+
+    if (!query) return true;
+    const haystack = norm(
+      [
+        item.name,
+        item.era,
+        item.country,
+        item.focus,
+        ...(item.tags || []),
+        ...(item.keyMoves || []),
+        ...(Array.isArray(item.split) ? item.split : [item.split]),
+      ].join(' '),
+    );
+    return haystack.includes(query);
+  });
+}
+
+function renderLibrary() {
+  if (!libraryGrid || !libraryFeatured || !libraryEmpty) return;
+  const filtered = filterLibraryItems(WORKOUT_LIBRARY);
+
+  if (!filtered.length) {
+    libraryGrid.innerHTML = '';
+    libraryFeatured.innerHTML = '';
+    libraryFeatured.style.display = 'none';
+    libraryEmpty.style.display = 'block';
+    return;
+  }
+
+  libraryEmpty.style.display = 'none';
+  libraryFeatured.innerHTML = '';
+  libraryFeatured.style.display = 'none';
+  libraryGrid.innerHTML = filtered.map((item) => buildFeaturedCard(item)).join('');
 }
 
 /* SELEÇÃO */
 function toggleExercise(exerciseId) {
   const index = selectedExercises.indexOf(exerciseId);
-  if (index > -1) selectedExercises.splice(index, 1);
-  else selectedExercises.push(exerciseId);
+  let isSelected = false;
+  if (index > -1) {
+    selectedExercises.splice(index, 1);
+    isSelected = false;
+  } else {
+    selectedExercises.push(exerciseId);
+    isSelected = true;
+  }
 
   const card = document.querySelector(`[data-exercise-id="${exerciseId}"]`);
-  if (card) card.classList.toggle('selected');
+  if (card) {
+    card.classList.toggle('selected', isSelected);
+    card.setAttribute('aria-pressed', String(isSelected));
+  }
 
   updateSelectedCount();
   saveSelectedExercises();
@@ -405,65 +2329,51 @@ function updateSelectedCount() {
   count.textContent = `${selectedExercises.length} exercício${
     selectedExercises.length !== 1 ? 's' : ''
   } selecionado${selectedExercises.length !== 1 ? 's' : ''}`;
-  updateGraphRepresentations();
+  renderDashboard();
 }
 
 /* FILTROS / CONTROLE */
 function getFilteredExercises() {
-  const muscleEl = document.getElementById('muscleSelect');
-  if (!muscleEl) return exercises;
-  const muscle = muscleEl.value;
+  const muscle = muscleSelect?.value || 'Todos';
   if (muscle === 'Todos') return exercises;
   return exercises.filter((ex) => ex.muscle === muscle);
 }
 
-function switchMode(m) {
-  mode = m;
-  document
-    .querySelectorAll('.tab')
-    .forEach((t) => t.classList.remove('active'));
-  try {
-    // inline onclick sets global event in some browsers; fallback se não existir
-    const el =
-      typeof event !== 'undefined' && event && event.target
-        ? event.target
-        : document.querySelector(`.tab`);
-    el && el.classList.add('active');
-  } catch (e) {}
-  const input = document.getElementById('searchInput');
-  if (input) input.value = '';
-  search();
+function buildSearchHaystack(exercise) {
+  return norm(
+    `${exercise.name} ${exercise.desc} ${exercise.muscle} ${exercise.equipment} ${exercise.difficulty}`,
+  );
+}
+
+function matchesSearch(exercise, term) {
+  if (!term) return true;
+  const haystack = buildSearchHaystack(exercise);
+  return haystack.includes(term);
 }
 
 function search() {
-  const inputEl = document.getElementById('searchInput');
-  const term = inputEl ? inputEl.value.trim() : '';
+  const rawTerm = searchInput ? searchInput.value.trim() : '';
+  const term = norm(rawTerm);
   const filtered = getFilteredExercises();
 
   if (!term || term.length < 2) {
-    render(filtered, null);
+    renderExercisesView(filtered);
     return;
   }
 
-  let result;
-  const muscle = document.getElementById('muscleSelect')
-    ? document.getElementById('muscleSelect').value
-    : 'Todos';
-  const sortedFiltered = sorted.filter(
-    (ex) => muscle === 'Todos' || ex.muscle === muscle,
+  const results = filtered.filter((exercise) =>
+    matchesSearch(exercise, term),
   );
-
-  if (mode === 'sequential') result = sequentialSearch(filtered, term);
-  else if (mode === 'binary') result = binarySearch(sortedFiltered, term);
-  else result = rabinKarp(filtered, term);
-
-  render(result.results, result.metrics);
+  renderExercisesView(results);
 }
 
 /* RENDER */
-function render(list, metrics) {
+function renderExercisesView(list) {
   const container = document.getElementById('results');
   if (!container) return;
+
+  const metricsContainer = document.getElementById('metricsContainer');
+  if (metricsContainer) metricsContainer.style.display = 'none';
 
   if (!list || list.length === 0) {
     container.innerHTML = `
@@ -483,7 +2393,7 @@ function render(list, metrics) {
         return `
         <div class="exercise-card ${
           isSelected ? 'selected' : ''
-        }" data-exercise-id="${ex.id}" onclick="toggleExercise(${ex.id})">
+        }" data-exercise-id="${ex.id}" role="button" tabindex="0" aria-pressed="${isSelected}">
           <div class="exercise-header">
             <div><h3 class="exercise-name">${ex.name}</h3></div>
             <span class="exercise-badge badge-${diffClass}">${
@@ -499,49 +2409,48 @@ function render(list, metrics) {
       })
       .join('');
   }
-
-  if (metrics) {
-    const mC = document.getElementById('metricsContainer');
-    const mG = document.getElementById('metricsGrid');
-    if (mC && mG) {
-      mC.style.display = 'block';
-      mG.innerHTML = `
-        <div class="metric-card">
-          <div class="metric-label">Algoritmo</div>
-          <div class="metric-value" style="font-size:16px">${metrics.algo}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Tempo</div>
-          <div class="metric-value">${metrics.time.toFixed(
-            2,
-          )}<span class="metric-unit">ms</span></div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Comparações</div>
-          <div class="metric-value">${metrics.comps}</div>
-        </div>
-        ${
-          metrics.confirms !== undefined
-            ? `
-        <div class="metric-card">
-          <div class="metric-label">Confirmações</div>
-          <div class="metric-value">${metrics.confirms}</div>
-        </div>`
-            : ''
-        }`;
-    }
-  } else {
-    const mC = document.getElementById('metricsContainer');
-    if (mC) mC.style.display = 'none';
-  }
 }
 
 /* PERFIL & AVALIAÇÕES - UI / LÓGICA */
+const modalFocusState = new Map();
+
+function openModal(modalElement, options = {}) {
+  if (!modalElement) return;
+  modalFocusState.set(modalElement, {
+    trigger: document.activeElement,
+  });
+  modalElement.classList.add('is-active');
+  modalElement.setAttribute('aria-hidden', 'false');
+  document.body?.classList.add('modal-open');
+
+  const focusSelector =
+    typeof options.initialFocus === 'string' ? options.initialFocus : null;
+  const focusTarget =
+    (focusSelector && modalElement.querySelector(focusSelector)) ||
+    (options.initialFocus instanceof HTMLElement
+      ? options.initialFocus
+      : null) ||
+    modalElement.querySelector(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+  if (focusTarget) setTimeout(() => focusTarget.focus(), 60);
+}
+
+function closeModal(modalElement) {
+  if (!modalElement) return;
+  modalElement.classList.remove('is-active');
+  modalElement.setAttribute('aria-hidden', 'true');
+  document.body?.classList.remove('modal-open');
+  const state = modalFocusState.get(modalElement);
+  modalFocusState.delete(modalElement);
+  if (state?.trigger && typeof state.trigger.focus === 'function') {
+    setTimeout(() => state.trigger.focus(), 0);
+  }
+}
+
 function openEvaluationModal() {
   if (!evaluationModal) return;
-  evaluationModal.classList.add('is-active');
-  evaluationModal.setAttribute('aria-hidden', 'false');
-  document.body?.classList.add('modal-open');
+  openModal(evaluationModal, { initialFocus: 'input[name="height"]' });
 
   if (!evaluationForm) return;
   evaluationForm.reset();
@@ -553,36 +2462,452 @@ function openEvaluationModal() {
     if (!dateInput.value) dateInput.value = today;
   }
 
-  const firstField = evaluationForm.querySelector('input[name="height"]');
-  if (firstField) setTimeout(() => firstField.focus(), 60);
 }
 
 function closeEvaluationModal() {
-  if (!evaluationModal) return;
-  evaluationModal.classList.remove('is-active');
-  evaluationModal.setAttribute('aria-hidden', 'true');
-  document.body?.classList.remove('modal-open');
+  closeModal(evaluationModal);
 }
 
 function openClearModal() {
-  if (!clearDataModal) return;
-  clearDataModal.classList.add('is-active');
-  clearDataModal.setAttribute('aria-hidden', 'false');
-  document.body?.classList.add('modal-open');
+  openModal(clearDataModal, { initialFocus: '[data-confirm-clear]' });
 }
 
 function closeClearModal() {
-  if (!clearDataModal) return;
-  clearDataModal.classList.remove('is-active');
-  clearDataModal.setAttribute('aria-hidden', 'true');
-  document.body?.classList.remove('modal-open');
+  closeModal(clearDataModal);
 }
 
-function handleProfileSubmit(event) {
+function openDeleteAccountModal() {
+  if (!deleteAccountModal) return;
+  if (deleteAccountConfirmInput) deleteAccountConfirmInput.value = '';
+  if (confirmDeleteAccountBtn) confirmDeleteAccountBtn.disabled = true;
+  if (deleteAccountEmail) {
+    deleteAccountEmail.textContent =
+      cloudSyncState.user?.email || profileData?.email || '—';
+  }
+  openModal(deleteAccountModal, { initialFocus: '#deleteAccountConfirmInput' });
+}
+
+function closeDeleteAccountModal() {
+  closeModal(deleteAccountModal);
+}
+
+function updateDeleteAccountValidation() {
+  if (!deleteAccountConfirmInput || !confirmDeleteAccountBtn) return;
+  const value = deleteAccountConfirmInput.value.trim().toUpperCase();
+  confirmDeleteAccountBtn.disabled = value !== 'NUDELETE-2026';
+}
+
+async function handleAccountDeletion() {
+  if (!cloudSyncState.client || !cloudSyncState.user) {
+    showAuthFeedback('Conecte-se para excluir sua conta.', 'error');
+    return;
+  }
+  if (
+    !deleteAccountConfirmInput ||
+    deleteAccountConfirmInput.value.trim().toUpperCase() !== 'NUDELETE-2026'
+  ) {
+    showAuthFeedback('Digite NUDELETE-2026 para confirmar.', 'error');
+    return;
+  }
+
+  const userId = cloudSyncState.user.id;
+  const originalLabel = confirmDeleteAccountBtn?.textContent || 'Excluir conta';
+  if (confirmDeleteAccountBtn) {
+    confirmDeleteAccountBtn.disabled = true;
+    confirmDeleteAccountBtn.textContent = 'Excluindo...';
+  }
+
+  let deletionError = null;
+
+  try {
+    const { error: rpcError } =
+      await cloudSyncState.client.rpc('delete_current_user');
+    if (rpcError) {
+      throw rpcError;
+    }
+  } catch (error) {
+    deletionError = error;
+  }
+
+  if (deletionError) {
+    const message = String(deletionError?.message || '').toLowerCase();
+    console.warn('Falha ao excluir conta:', deletionError);
+    if (message.includes('not authenticated')) {
+      await safeSignOut({ skipNetwork: true });
+      closeDeleteAccountModal();
+      showAuthFeedback(
+        'Sessão inválida. Faça login novamente para excluir a conta.',
+        'error',
+      );
+    } else if (message.includes('permission') || message.includes('not found')) {
+      showAuthFeedback(
+        'Crie a função delete_current_user no Supabase antes de excluir.',
+        'error',
+      );
+    } else if (message.includes('token de outro projeto')) {
+      await safeSignOut({ skipNetwork: true });
+      closeDeleteAccountModal();
+      showAuthFeedback(
+        'Sessão inválida. Faça login novamente para excluir a conta.',
+        'error',
+      );
+    } else {
+      showAuthFeedback(
+        'Não foi possível excluir a conta. Verifique a função delete_current_user.',
+        'error',
+      );
+    }
+    if (confirmDeleteAccountBtn) {
+      confirmDeleteAccountBtn.disabled = false;
+      confirmDeleteAccountBtn.textContent = originalLabel;
+    }
+    return;
+  }
+
+  await safeSignOut({ skipNetwork: true });
+  cloudSyncState.user = null;
+  setStateOwner('');
+  resetLocalState();
+  closeDeleteAccountModal();
+  handleAuthStateChange();
+  showAuthFeedback('Conta excluída com sucesso.');
+}
+
+function setAuthScreen(isActive) {
+  document.body.classList.toggle('auth-screen', isActive);
+  if (isActive && authYear) {
+    authYear.textContent = new Date().getFullYear();
+  }
+}
+
+function switchAuthView(view = 'login') {
+  const isLogin = view === 'login';
+  const isRegister = view === 'register';
+  const isConfirm = view === 'confirm';
+  if (loginView) {
+    loginView.classList.toggle('active', isLogin);
+    loginView.setAttribute('aria-hidden', String(!isLogin));
+  }
+  if (registerView) {
+    registerView.classList.toggle('active', isRegister);
+    registerView.setAttribute('aria-hidden', String(!isRegister));
+  }
+  if (confirmView) {
+    confirmView.classList.toggle('active', isConfirm);
+    confirmView.setAttribute('aria-hidden', String(!isConfirm));
+  }
+}
+
+function togglePasswordVisibility(button) {
+  const wrapper = button?.closest('.auth-input');
+  const input = wrapper?.querySelector('input');
+  if (!input) return;
+  const isPassword = input.type === 'password';
+  input.type = isPassword ? 'text' : 'password';
+  button.textContent = isPassword ? '🙈' : '👁️';
+  button.setAttribute(
+    'aria-label',
+    isPassword ? 'Ocultar senha' : 'Mostrar senha',
+  );
+}
+
+function setAuthLoading(form, isLoading) {
+  const submit = form?.querySelector('.auth-submit');
+  if (!submit) return;
+  submit.classList.toggle('loading', isLoading);
+  submit.disabled = isLoading;
+}
+
+function isRegisterCooldownActive() {
+  return registerCooldownUntil > Date.now();
+}
+
+function updateRegisterCooldown() {
+  const submit = registerForm?.querySelector('.auth-submit');
+  const label = submit?.querySelector('.auth-submit-text');
+  if (!submit || !label) return;
+
+  const remaining = Math.max(
+    0,
+    Math.ceil((registerCooldownUntil - Date.now()) / 1000),
+  );
+
+  if (remaining > 0) {
+    if (!submit.dataset.originalLabel) {
+      submit.dataset.originalLabel = label.textContent || 'Começar evolução';
+    }
+    submit.disabled = true;
+    submit.classList.remove('loading');
+    label.textContent = `Aguarde ${remaining}s`;
+    if (authResendButton) authResendButton.disabled = true;
+    registerCooldownTimer = setTimeout(updateRegisterCooldown, 1000);
+  } else {
+    submit.disabled = false;
+    if (submit.dataset.originalLabel) {
+      label.textContent = submit.dataset.originalLabel;
+    }
+    if (authResendButton) authResendButton.disabled = false;
+    registerCooldownUntil = 0;
+    if (registerCooldownTimer) {
+      clearTimeout(registerCooldownTimer);
+      registerCooldownTimer = null;
+    }
+  }
+}
+
+function startRegisterCooldown(seconds = 60) {
+  registerCooldownUntil = Date.now() + seconds * 1000;
+  updateRegisterCooldown();
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  if (!cloudSyncState.client) {
+    showAuthFeedback(
+      'Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar o login.',
+      'error',
+    );
+    return;
+  }
+
+  const email = loginEmailInput?.value?.trim();
+  const password = loginPasswordInput?.value || '';
+  if (!email || !password) {
+    showAuthFeedback('Preencha email e senha.', 'error');
+    return;
+  }
+
+  setAuthLoading(loginForm, true);
+  const { error } = await cloudSyncState.client.auth.signInWithPassword({
+    email,
+    password,
+  });
+  setAuthLoading(loginForm, false);
+
+  if (error) {
+    showAuthFeedback('Falha ao entrar. Verifique os dados.', 'error');
+    return;
+  }
+
+  showAuthFeedback('Login realizado com sucesso!');
+  loginForm?.reset();
+}
+
+async function handleRegisterSubmit(event) {
+  event.preventDefault();
+  if (!cloudSyncState.client) {
+    showAuthFeedback(
+      'Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar o login.',
+      'error',
+    );
+    return;
+  }
+
+  if (isRegisterCooldownActive()) {
+    updateRegisterCooldown();
+    showAuthFeedback('Aguarde alguns segundos para tentar novamente.', 'error');
+    return;
+  }
+
+  const name = registerNameInput?.value?.trim();
+  const email = registerEmailInput?.value?.trim();
+  const password = registerPasswordInput?.value || '';
+  const confirm = registerConfirmInput?.value || '';
+
+  if (!name || !email || !password || !confirm) {
+    showAuthFeedback('Preencha todos os campos.', 'error');
+    return;
+  }
+
+  if (password.length < 8) {
+    showAuthFeedback('A senha deve ter pelo menos 8 caracteres.', 'error');
+    return;
+  }
+
+  if (password !== confirm) {
+    showAuthFeedback('As senhas não coincidem.', 'error');
+    return;
+  }
+
+  setAuthLoading(registerForm, true);
+  const { data, error } = await cloudSyncState.client.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { name },
+    },
+  });
+  setAuthLoading(registerForm, false);
+
+  if (error) {
+    const message = String(error?.message || '').toLowerCase();
+    const status = error?.status || error?.statusCode;
+    if (status === 429 || message.includes('rate') || message.includes('too')) {
+      startRegisterCooldown(60);
+      showAuthFeedback(
+        'Muitas tentativas. Aguarde 1 minuto e tente novamente.',
+        'error',
+      );
+      return;
+    }
+    showAuthFeedback('Não foi possível criar a conta.', 'error');
+    return;
+  }
+
+  if (!data?.session) {
+    pendingConfirmEmail = email;
+    if (confirmEmailLabel) confirmEmailLabel.textContent = email;
+    showAuthFeedback('Conta criada! Confirme o email para entrar.');
+    switchAuthView('confirm');
+    return;
+  }
+
+  showAuthFeedback('Conta criada e autenticada!');
+  registerForm?.reset();
+}
+
+async function handlePasswordReset(event) {
+  event.preventDefault();
+  if (!cloudSyncState.client) {
+    showAuthFeedback(
+      'Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar o login.',
+      'error',
+    );
+    return;
+  }
+  const email = loginEmailInput?.value?.trim();
+  if (!email) {
+    showAuthFeedback('Informe seu email para recuperar a senha.', 'error');
+    return;
+  }
+  const { error } = await cloudSyncState.client.auth.resetPasswordForEmail(
+    email,
+    {
+      redirectTo: window.location.origin,
+    },
+  );
+  if (error) {
+    showAuthFeedback('Não foi possível enviar o email.', 'error');
+    return;
+  }
+  showAuthFeedback('Email de recuperação enviado.');
+}
+
+async function handleResendConfirmation(event) {
+  event.preventDefault();
+  if (!cloudSyncState.client) {
+    showAuthFeedback(
+      'Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar o login.',
+      'error',
+    );
+    return;
+  }
+
+  if (isRegisterCooldownActive()) {
+    updateRegisterCooldown();
+    showAuthFeedback('Aguarde alguns segundos para tentar novamente.', 'error');
+    return;
+  }
+
+  const email = pendingConfirmEmail || registerEmailInput?.value?.trim();
+  if (!email) {
+    showAuthFeedback('Informe o email para reenviar a confirmação.', 'error');
+    return;
+  }
+
+  try {
+    const { error } = await cloudSyncState.client.auth.resend({
+      type: 'signup',
+      email,
+    });
+    if (error) {
+      const message = String(error?.message || '').toLowerCase();
+      const status = error?.status || error?.statusCode;
+      if (status === 429 || message.includes('rate') || message.includes('too')) {
+        startRegisterCooldown(60);
+        showAuthFeedback(
+          'Muitas tentativas. Aguarde 1 minuto e tente novamente.',
+          'error',
+        );
+        return;
+      }
+      showAuthFeedback('Não foi possível reenviar o email.', 'error');
+      return;
+    }
+    showAuthFeedback('Email de confirmação reenviado.');
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Não foi possível reenviar o email.', 'error');
+  }
+}
+
+function handleAuthStateChange() {
+  updateAuthUI();
+  if (cloudSyncState.user) {
+    setAuthScreen(false);
+    pendingConfirmEmail = '';
+    const ownerId = getStateOwner();
+    if (ownerId && ownerId !== cloudSyncState.user.id) {
+      cloudSyncSuspended = true;
+      resetLocalState();
+      cloudSyncSuspended = false;
+      cloudSyncState.lastSyncAt = null;
+      workoutCloudSync.lastSyncAt = null;
+      evaluationCloudSync.lastSyncAt = null;
+    }
+    setStateOwner(cloudSyncState.user.id);
+    hydrateProfileFromAuth();
+    const preferred = loadActivePage();
+    const nextPage = preferred && preferred !== 'login' ? preferred : 'dashboard';
+    navigateTo(nextPage);
+    loadCloudState();
+  } else {
+    cloudSyncState.lastSyncAt = null;
+    workoutCloudSync.lastSyncAt = null;
+    evaluationCloudSync.lastSyncAt = null;
+    if (deleteAccountModal?.classList.contains('is-active')) {
+      closeDeleteAccountModal();
+    }
+    switchAuthView('login');
+    navigateTo('login');
+  }
+  if (registerCooldownUntil) updateRegisterCooldown();
+}
+
+async function handleProfileSubmit(event) {
   event.preventDefault();
   if (!profileForm) return;
 
   const formData = new FormData(profileForm);
+  const newPassword = String(formData.get('newPassword') || '');
+  const confirmPassword = String(formData.get('confirmPassword') || '');
+
+  if (newPassword || confirmPassword) {
+    if (!cloudSyncState.client || !cloudSyncState.user) {
+      showProfileFeedback('Conecte-se para alterar a senha.', 'error');
+      return;
+    }
+    if (newPassword.length < 8) {
+      showProfileFeedback(
+        'A nova senha precisa ter pelo menos 8 caracteres.',
+        'error',
+      );
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showProfileFeedback('As senhas não coincidem.', 'error');
+      return;
+    }
+
+    const { error } = await cloudSyncState.client.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) {
+      showProfileFeedback('Não foi possível atualizar a senha.', 'error');
+      return;
+    }
+  }
+
   profileData = {
     name: (formData.get('name') || '').trim(),
     phone: (formData.get('phone') || '').trim(),
@@ -594,7 +2919,8 @@ function handleProfileSubmit(event) {
 
   saveProfileToStorage(profileData);
   populateProfileForm(profileData);
-  showSuccessFeedback('Informações atualizadas com sucesso!');
+  showProfileFeedback('Informações atualizadas com sucesso!');
+  renderDashboard();
 }
 
 function handleEvaluationSubmit(event) {
@@ -617,6 +2943,7 @@ function handleEvaluationSubmit(event) {
   evaluations = sortEvaluations([entry, ...evaluations]);
   saveEvaluationsToStorage(evaluations);
   renderEvaluationsUI();
+  renderDashboard();
   closeEvaluationModal();
   showSuccessFeedback('Avaliação registrada com sucesso!');
 }
@@ -633,6 +2960,7 @@ function handleDeleteEvaluation(id) {
   evaluations = evaluations.filter((entry) => entry.id !== id);
   saveEvaluationsToStorage(evaluations);
   renderEvaluationsUI();
+  renderDashboard();
   showSuccessFeedback('Avaliação removida.');
 }
 
@@ -643,11 +2971,15 @@ function populateProfileForm(data = {}) {
   const phoneInput = profileForm.querySelector('[name="phone"]');
   const birthInput = profileForm.querySelector('[name="birthdate"]');
   const emailInput = profileForm.querySelector('[name="email"]');
+  const passwordInput = profileForm.querySelector('[name="newPassword"]');
+  const confirmInput = profileForm.querySelector('[name="confirmPassword"]');
 
   if (nameInput) nameInput.value = data.name || '';
   if (phoneInput) phoneInput.value = data.phone || '';
   if (birthInput) birthInput.value = data.birthdate || '';
   if (emailInput) emailInput.value = data.email || '';
+  if (passwordInput) passwordInput.value = '';
+  if (confirmInput) confirmInput.value = '';
 
   if (data.gender) {
     const genderRadio = profileForm.querySelector(
@@ -664,6 +2996,7 @@ function populateProfileForm(data = {}) {
   }
 
   refreshRadioChips();
+  renderProfileSummary();
 }
 
 function refreshRadioChips() {
@@ -677,6 +3010,7 @@ function refreshRadioChips() {
 function renderEvaluationsUI() {
   renderEvaluationRecords();
   renderLastEvaluation();
+  renderProfileSummary();
 }
 
 function renderEvaluationRecords() {
@@ -813,11 +3147,36 @@ function getTodayInSaoPaulo() {
 function showSuccessFeedback(message) {
   if (!profileFeedback) return;
   profileFeedback.textContent = message;
+  profileFeedback.dataset.type = 'success';
   profileFeedback.classList.add('is-visible');
   clearTimeout(profileFeedback._timeout);
   profileFeedback._timeout = setTimeout(
     () => profileFeedback.classList.remove('is-visible'),
     3200,
+  );
+}
+
+function showProfileFeedback(message, type = 'success') {
+  if (!profileFeedback) return;
+  profileFeedback.textContent = message;
+  profileFeedback.dataset.type = type;
+  profileFeedback.classList.add('is-visible');
+  clearTimeout(profileFeedback._timeout);
+  profileFeedback._timeout = setTimeout(
+    () => profileFeedback.classList.remove('is-visible'),
+    3200,
+  );
+}
+
+function showAuthFeedback(message, type = 'success') {
+  if (!authFeedback) return;
+  authFeedback.textContent = message;
+  authFeedback.dataset.type = type;
+  authFeedback.classList.add('is-visible');
+  clearTimeout(authFeedback._timeout);
+  authFeedback._timeout = setTimeout(
+    () => authFeedback.classList.remove('is-visible'),
+    3600,
   );
 }
 
@@ -872,6 +3231,47 @@ function formatDate(input) {
   });
 }
 
+function formatDateTime(input) {
+  if (!input) return '—';
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || ''),
+  );
+}
+
+function parseJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    return JSON.parse(atob(parts[1]));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function createUuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const rand = (Math.random() * 16) | 0;
+    const value = char === 'x' ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 function sortEvaluations(list) {
   return list.slice().sort((a, b) => {
     const dateB = parseDate(b.date);
@@ -882,63 +3282,154 @@ function sortEvaluations(list) {
   });
 }
 
+function normalizeEvaluations(list) {
+  if (!Array.isArray(list)) return [];
+  const normalized = list.map((entry) => ({
+    id: entry?.id || Date.now() + Math.random(),
+    height: toNumber(entry?.height),
+    waist: toNumber(entry?.waist),
+    neck: toNumber(entry?.neck),
+    weight: toNumber(entry?.weight),
+    bodyFat: toNumber(entry?.bodyFat),
+    date: entry?.date || entry?.createdAt || '',
+  }));
+  return sortEvaluations(normalized);
+}
+
+function getEvaluationLocalId(entry) {
+  const numeric = Number(entry?.id);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeSessionLogs(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((entry) => ({
+      id: entry?.id || `${Date.now()}-${Math.random()}`,
+      date: entry?.date || entry?.createdAt || '',
+      workoutId: entry?.workoutId || '',
+      workoutName: entry?.workoutName || '',
+      dayIndex: Number.isFinite(entry?.dayIndex) ? entry.dayIndex : 0,
+      dayLabel: entry?.dayLabel || '',
+      exerciseId: entry?.exerciseId || '',
+      exerciseName: entry?.exerciseName || '',
+      weight: toNumber(entry?.weight),
+      reps: toNumber(entry?.reps),
+    }))
+    .filter((entry) => entry.exerciseName);
+}
+
+function loadStateMeta() {
+  const parsed = storageService.getJSON(STATE_META_STORAGE_KEY, {});
+  return parsed && typeof parsed === 'object' ? parsed : {};
+}
+
+function setStateMeta(updatedAt) {
+  stateMeta = {
+    ...(stateMeta && typeof stateMeta === 'object' ? stateMeta : {}),
+    updatedAt,
+  };
+  storageService.setJSON(STATE_META_STORAGE_KEY, stateMeta);
+}
+
+function touchStateMeta() {
+  if (cloudSyncSuspended) return;
+  setStateMeta(new Date().toISOString());
+}
+
+function saveSessionLogsToStorage(data) {
+  storageService.setJSON(SESSION_STORAGE_KEY, data);
+  touchStateMeta();
+  scheduleCloudSync('silent');
+}
+
 function saveProfileToStorage(data) {
-  try {
-    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.warn('Não foi possível salvar os dados pessoais.', error);
-  }
+  storageService.setJSON(PROFILE_STORAGE_KEY, data);
+  touchStateMeta();
+  scheduleCloudSync('silent');
 }
 
 function saveEvaluationsToStorage(data) {
-  try {
-    localStorage.setItem(EVALUATION_STORAGE_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.warn('Não foi possível salvar as avaliações.', error);
-  }
+  storageService.setJSON(EVALUATION_STORAGE_KEY, data);
+  touchStateMeta();
+  scheduleCloudSync('silent');
+  scheduleEvaluationCloudSync('silent');
 }
 
 function loadProfileFromStorage() {
-  try {
-    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (error) {
-    console.warn('Não foi possível carregar os dados pessoais salvos.', error);
-    return {};
-  }
+  const raw = storageService.getJSON(PROFILE_STORAGE_KEY, {});
+  return raw && typeof raw === 'object' ? raw : {};
 }
 
 function loadEvaluationsFromStorage() {
-  try {
-    const raw = localStorage.getItem(EVALUATION_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const normalized = parsed.map((entry) => ({
-      id: entry.id || Date.now() + Math.random(),
-      height: toNumber(entry.height),
-      waist: toNumber(entry.waist),
-      neck: toNumber(entry.neck),
-      weight: toNumber(entry.weight),
-      bodyFat: toNumber(entry.bodyFat),
-      date: entry.date || entry.createdAt || '',
-    }));
-    return sortEvaluations(normalized);
-  } catch (error) {
-    console.warn('Não foi possível carregar as avaliações.', error);
-    return [];
-  }
+  const parsed = storageService.getJSON(EVALUATION_STORAGE_KEY, []);
+  return normalizeEvaluations(parsed);
 }
 
 function loadWorkoutsFromStorage() {
-  try {
-    const raw = localStorage.getItem(WORKOUT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? normalizeWorkoutCollection(parsed) : [];
-  } catch (error) {
-    console.warn('Não foi possível carregar os treinos.', error);
-    return [];
+  const parsed = storageService.getJSON(WORKOUT_STORAGE_KEY, []);
+  return Array.isArray(parsed) ? normalizeWorkoutCollection(parsed) : [];
+}
+
+function loadSessionLogsFromStorage() {
+  const parsed = storageService.getJSON(SESSION_STORAGE_KEY, []);
+  return normalizeSessionLogs(parsed);
+}
+
+function getStateOwner() {
+  return storageService.getString(STATE_OWNER_STORAGE_KEY, '').trim();
+}
+
+function setStateOwner(value) {
+  storageService.setString(STATE_OWNER_STORAGE_KEY, value || '');
+}
+
+function resetLocalState() {
+  selectedExercises = [];
+  profileData = {};
+  evaluations = [];
+  sessionLogs = [];
+  workouts = [];
+  stateMeta = {};
+
+  storageService.setJSON(SELECTED_EXERCISES_STORAGE_KEY, []);
+  storageService.setJSON(PROFILE_STORAGE_KEY, {});
+  storageService.setJSON(EVALUATION_STORAGE_KEY, []);
+  storageService.setJSON(SESSION_STORAGE_KEY, []);
+  storageService.setJSON(WORKOUT_STORAGE_KEY, []);
+  storageService.setJSON(STATE_META_STORAGE_KEY, {});
+
+  updateSelectedCount();
+  search();
+  updateTreinosPage();
+  populateProfileForm({});
+  renderEvaluationsUI();
+  renderStrengthSection();
+  renderSessionUI();
+  renderDashboard();
+}
+
+function ensureWorkoutIds() {
+  let changed = false;
+  const idMap = new Map();
+
+  workouts = workouts.map((workout) => {
+    const currentId = workout.id;
+    if (isUuid(currentId)) return workout;
+    const newId = createUuid();
+    idMap.set(currentId, newId);
+    changed = true;
+    return { ...workout, id: newId };
+  });
+
+  if (changed) {
+    sessionLogs = sessionLogs.map((entry) => {
+      const updatedId = idMap.get(entry.workoutId);
+      if (!updatedId) return entry;
+      return { ...entry, workoutId: updatedId };
+    });
+    saveWorkoutsToStorage(workouts);
+    saveSessionLogsToStorage(sessionLogs);
   }
 }
 
@@ -985,52 +3476,72 @@ function parsePrescription(prescription = '') {
 }
 
 function saveWorkoutsToStorage(data) {
-  try {
-    localStorage.setItem(WORKOUT_STORAGE_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.warn('Não foi possível salvar os treinos.', error);
-  }
+  storageService.setJSON(WORKOUT_STORAGE_KEY, data);
+  touchStateMeta();
+  scheduleCloudSync('silent');
+  scheduleWorkoutCloudSync('silent');
 }
 
 function saveActivePage(page) {
   const normalized = typeof page === 'string' ? page.trim() : '';
   if (!normalized) return;
-  try {
-    localStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, normalized);
-  } catch (error) {
-    console.warn('Não foi possível salvar a página ativa.', error);
-  }
+  storageService.setString(ACTIVE_PAGE_STORAGE_KEY, normalized);
 }
 
 function loadActivePage() {
-  try {
-    const saved = (localStorage.getItem(ACTIVE_PAGE_STORAGE_KEY) || '').trim();
-    if (saved && document.getElementById(`page-${saved}`)) return saved;
-  } catch (error) {
-    console.warn('Não foi possível carregar a última página ativa.', error);
+  const saved = storageService.getString(ACTIVE_PAGE_STORAGE_KEY, '').trim();
+  if (saved === 'login') return 'dashboard';
+  if (saved && document.getElementById(`page-${saved}`)) return saved;
+  return 'dashboard';
+}
+
+const compressionService = {
+  compress(payload) {
+    if (!window.LZString?.compressToBase64) return null;
+    return window.LZString.compressToBase64(payload);
+  },
+  decompress(payload) {
+    if (!window.LZString?.decompressFromBase64) return null;
+    return window.LZString.decompressFromBase64(payload);
+  },
+};
+
+function getByteSize(text) {
+  if (!text) return 0;
+  if (typeof TextEncoder === 'undefined') {
+    return new Blob([text]).size;
   }
-  return 'exercicios';
+  return new TextEncoder().encode(text).length;
 }
 
 function exportData() {
-  if (!window.Huffman) {
-    alert('Algoritmo de Huffman ainda não está disponível.');
+  if (!window.LZString) {
+    alert('Compressão indisponível no momento.');
     return;
   }
 
   try {
     const payload = buildExportPayload();
     const jsonData = JSON.stringify(payload);
+    const originalBytes = getByteSize(jsonData);
     const start = performance.now();
-    const result = window.Huffman.huffmanCompress(jsonData);
+    const compressed = compressionService.compress(jsonData);
     const execTime = performance.now() - start;
 
+    if (!compressed) throw new Error('Falha ao comprimir o payload.');
+
+    const compressedBytes = getByteSize(compressed);
+    const compressionRatio =
+      originalBytes === 0
+        ? 0
+        : ((originalBytes - compressedBytes) / originalBytes) * 100;
+
     const exportPackage = {
-      version: 1,
+      app: 'nushape',
+      packageVersion: EXPORT_PACKAGE_VERSION,
+      codec: EXPORT_CODEC,
       createdAt: new Date().toISOString(),
-      compressed: result.compressed,
-      padding: result.padding,
-      tree: result.tree,
+      payload: compressed,
     };
 
     lastExportBlob = new Blob([JSON.stringify(exportPackage)], {
@@ -1040,8 +3551,14 @@ function exportData() {
     lastExportFilename = `nushape-${today}.nushape`;
 
     updateExportModal({
-      ...result.metrics,
+      originalBytes,
+      compressedBytes,
+      compressionRatio,
       execTime,
+      selectedCount: selectedExercises.length,
+      workoutCount: workouts.length,
+      evaluationCount: evaluations.length,
+      sessionCount: sessionLogs.length,
     });
     openExportModal();
   } catch (error) {
@@ -1052,28 +3569,30 @@ function exportData() {
 
 function buildExportPayload() {
   return {
-    version: 2,
+    version: EXPORT_DATA_VERSION,
     generatedAt: new Date().toISOString(),
-    selectedExercises,
-    profile: profileData,
-    evaluations,
-    workouts,
+    data: {
+      selectedExercises,
+      profile: profileData,
+      evaluations,
+      sessionLogs,
+      workouts,
+    },
   };
 }
 
 function openExportModal() {
   if (!exportModal) return;
-  exportModal.classList.add('is-active');
-  exportModal.setAttribute('aria-hidden', 'false');
-  document.body?.classList.add('modal-open');
   if (downloadExportBtn) downloadExportBtn.disabled = !lastExportBlob;
+  const focusTarget =
+    downloadExportBtn && !downloadExportBtn.disabled
+      ? downloadExportBtn
+      : exportModal.querySelector('[data-close-export], .modal-close');
+  openModal(exportModal, { initialFocus: focusTarget });
 }
 
 function closeExportModal() {
-  if (!exportModal) return;
-  exportModal.classList.remove('is-active');
-  exportModal.setAttribute('aria-hidden', 'true');
-  document.body?.classList.remove('modal-open');
+  closeModal(exportModal);
 }
 
 function handleExportDownload() {
@@ -1095,9 +3614,9 @@ function updateExportModal(metrics = {}) {
     compressedBytes = 0,
     compressionRatio = 0,
     execTime = 0,
-    uniqueChars = 0,
-    averageDepth = 0,
-    treeHeight = 0,
+    selectedCount = 0,
+    workoutCount = 0,
+    evaluationCount = 0,
   } = metrics;
 
   if (exportOriginalSizeEl)
@@ -1109,9 +3628,10 @@ function updateExportModal(metrics = {}) {
       compressionRatio,
     )} economia`;
   if (exportTimeEl) exportTimeEl.textContent = `${execTime.toFixed(2)} ms`;
-  if (exportUniqueCharsEl) exportUniqueCharsEl.textContent = uniqueChars;
-  if (exportAvgDepthEl) exportAvgDepthEl.textContent = averageDepth.toFixed(2);
-  if (exportTreeHeightEl) exportTreeHeightEl.textContent = treeHeight;
+  if (exportSelectedCountEl) exportSelectedCountEl.textContent = selectedCount;
+  if (exportWorkoutCountEl) exportWorkoutCountEl.textContent = workoutCount;
+  if (exportEvaluationCountEl)
+    exportEvaluationCountEl.textContent = evaluationCount;
 
   if (compressionBarFill) {
     const savings = Math.max(0, Math.min(100, compressionRatio));
@@ -1122,24 +3642,100 @@ function updateExportModal(metrics = {}) {
   if (downloadExportBtn) downloadExportBtn.disabled = !lastExportBlob;
 }
 
+function parseImportPayload(rawData) {
+  if (!rawData || typeof rawData !== 'object') return null;
+
+  if (
+    rawData.app === 'nushape' &&
+    rawData.codec === EXPORT_CODEC &&
+    typeof rawData.payload === 'string'
+  ) {
+    const json = compressionService.decompress(rawData.payload);
+    if (!json) return null;
+    try {
+      return JSON.parse(json);
+    } catch (error) {
+      console.warn('Payload inválido após descompressão.', error);
+      return null;
+    }
+  }
+
+  if (rawData.version && rawData.data) {
+    return rawData;
+  }
+
+  if (
+    rawData.version === 2 &&
+    (rawData.selectedExercises || rawData.profile || rawData.evaluations)
+  ) {
+    return {
+      version: 2,
+      data: {
+        selectedExercises: rawData.selectedExercises,
+        profile: rawData.profile,
+        evaluations: rawData.evaluations,
+        sessionLogs: rawData.sessionLogs,
+        workouts: rawData.workouts,
+      },
+    };
+  }
+
+  return null;
+}
+
+function validateImportPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { ok: false, message: 'Arquivo inválido.' };
+  }
+
+  const version = Number(payload.version);
+  if (!Number.isFinite(version)) {
+    return { ok: false, message: 'Versão do arquivo ausente.' };
+  }
+
+  if (version !== EXPORT_DATA_VERSION && version !== 2) {
+    return { ok: false, message: 'Versão do arquivo não suportada.' };
+  }
+
+  const data = payload.data || {};
+  return {
+    ok: true,
+    data: {
+      selectedExercises: normalizeSelectedExercises(data.selectedExercises),
+      profile: data.profile && typeof data.profile === 'object' ? data.profile : {},
+      evaluations: normalizeEvaluations(data.evaluations),
+      sessionLogs: normalizeSessionLogs(data.sessionLogs),
+      workouts: Array.isArray(data.workouts)
+        ? normalizeWorkoutCollection(data.workouts)
+        : [],
+    },
+  };
+}
+
 function handleImportFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      if (!window.Huffman) throw new Error('Huffman indisponível');
-      const parsed = JSON.parse(e.target.result);
+      const parsedFile = JSON.parse(e.target.result);
       if (
-        !parsed ||
-        typeof parsed !== 'object' ||
-        !Object.prototype.hasOwnProperty.call(parsed, 'compressed')
+        parsedFile &&
+        typeof parsedFile === 'object' &&
+        parsedFile.compressed &&
+        parsedFile.tree &&
+        !parsedFile.codec
       ) {
-        throw new Error('Arquivo inválido');
+        throw new Error(
+          'Arquivo .nushape antigo não é compatível com esta versão.',
+        );
       }
-      const jsonString = window.Huffman.huffmanDecompress(parsed);
-      const data = JSON.parse(jsonString);
-      applyImportedData(data);
+      const payload = parseImportPayload(parsedFile);
+      const validation = validateImportPayload(payload);
+      if (!validation.ok) {
+        throw new Error(validation.message || 'Arquivo inválido');
+      }
+      applyImportedData(validation.data);
       showSuccessFeedback('Dados importados com sucesso!');
     } catch (error) {
       console.error('Importação falhou:', error);
@@ -1155,11 +3751,10 @@ function handleImportFile(event) {
 }
 
 function applyImportedData(data = {}) {
-  selectedExercises = Array.isArray(data.selectedExercises)
-    ? data.selectedExercises
-    : [];
+  selectedExercises = normalizeSelectedExercises(data.selectedExercises);
   profileData = data.profile || {};
-  evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
+  evaluations = normalizeEvaluations(data.evaluations);
+  sessionLogs = normalizeSessionLogs(data.sessionLogs);
   workouts = Array.isArray(data.workouts)
     ? normalizeWorkoutCollection(data.workouts)
     : [];
@@ -1167,15 +3762,16 @@ function applyImportedData(data = {}) {
   saveSelectedExercises();
   saveProfileToStorage(profileData);
   saveEvaluationsToStorage(evaluations);
+  saveSessionLogsToStorage(sessionLogs);
   saveWorkoutsToStorage(workouts);
 
   updateSelectedCount();
-  render(exercises, null);
+  search();
   updateTreinosPage();
   populateProfileForm(profileData);
   renderEvaluationsUI();
-  updateGraphRepresentations();
-  renderWorkoutCards();
+  renderStrengthSection();
+  renderSessionUI();
 }
 
 function formatBytes(bytes) {
@@ -1192,6 +3788,589 @@ function formatBytes(bytes) {
 function formatPercentage(value) {
   if (!Number.isFinite(value)) return '0%';
   return `${value.toFixed(2)}%`;
+}
+
+/* ===================== SUPABASE / CLOUD ===================== */
+
+function getSupabaseConfig() {
+  const url =
+    typeof window.SUPABASE_URL === 'string' ? window.SUPABASE_URL.trim() : '';
+  const anonKey =
+    typeof window.SUPABASE_ANON_KEY === 'string'
+      ? window.SUPABASE_ANON_KEY.trim()
+      : '';
+  return { url, anonKey, ready: Boolean(url && anonKey) };
+}
+
+function updateAuthUI() {
+  const loggedIn = Boolean(cloudSyncState.user);
+  if (authTrigger) authTrigger.textContent = loggedIn ? 'Sair' : 'Entrar';
+  authLogoutButtons.forEach((button) => {
+    button.style.display = loggedIn ? 'inline-flex' : 'none';
+  });
+}
+
+function getSupabaseProjectRef() {
+  const url =
+    typeof window.SUPABASE_URL === 'string' ? window.SUPABASE_URL.trim() : '';
+  const match = url.match(/https?:\/\/([^.]+)\.supabase\.co/i);
+  return match ? match[1] : '';
+}
+
+function clearSupabaseLocalSession() {
+  const ref = getSupabaseProjectRef();
+  if (!ref) return;
+  localStorage.removeItem(`sb-${ref}-auth-token`);
+  localStorage.removeItem(`sb-${ref}-auth-token-code-verifier`);
+}
+
+async function safeSignOut(options = {}) {
+  if (!cloudSyncState.client) return;
+  const skipNetwork = options.skipNetwork === true;
+  try {
+    if (!skipNetwork) {
+      await cloudSyncState.client.auth.signOut({ scope: 'local' });
+    }
+  } catch (error) {
+    console.warn('Falha ao sair (ignorando):', error);
+  } finally {
+    if (typeof cloudSyncState.client.auth?.stopAutoRefresh === 'function') {
+      cloudSyncState.client.auth.stopAutoRefresh();
+    }
+    clearSupabaseLocalSession();
+  }
+}
+
+function parseTimestamp(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildCloudPayload() {
+  const updatedAt = stateMeta?.updatedAt || new Date().toISOString();
+  return {
+    version: EXPORT_DATA_VERSION,
+    updatedAt,
+    data: {
+      selectedExercises,
+      profile: profileData,
+      evaluations,
+      sessionLogs,
+    },
+  };
+}
+
+function applyCloudPayload(payload) {
+  const validation = validateImportPayload(payload);
+  if (!validation.ok) return false;
+  cloudSyncSuspended = true;
+  applyImportedData(validation.data);
+  cloudSyncSuspended = false;
+  setStateMeta(payload.updatedAt || new Date().toISOString());
+  return true;
+}
+
+async function syncToCloud(reason = 'auto') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncState.syncing) return;
+  cloudSyncState.syncing = true;
+  renderProfileSummary();
+  const payload = buildCloudPayload();
+  const updatedAt = payload.updatedAt || new Date().toISOString();
+  try {
+    const { error } = await cloudSyncState.client
+      .from(CLOUD_STATE_TABLE)
+      .upsert(
+        {
+          user_id: cloudSyncState.user.id,
+          data: payload,
+          updated_at: updatedAt,
+        },
+        { onConflict: 'user_id' },
+      );
+
+    if (error) {
+      console.warn('Falha ao sincronizar com a nuvem:', error);
+      showAuthFeedback('Erro ao sincronizar com a nuvem.', 'error');
+    } else {
+      cloudSyncState.lastSyncAt = new Date().toISOString();
+      if (reason !== 'silent') {
+        showAuthFeedback('Dados sincronizados com a nuvem.');
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Erro ao sincronizar com a nuvem.', 'error');
+  } finally {
+    cloudSyncState.syncing = false;
+    renderProfileSummary();
+  }
+}
+
+function scheduleCloudSync(reason = 'silent') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncSuspended) return;
+  clearTimeout(cloudSyncState.syncTimer);
+  cloudSyncState.syncTimer = setTimeout(
+    () => syncToCloud(reason),
+    1200,
+  );
+}
+
+function scheduleWorkoutCloudSync(reason = 'silent') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncSuspended) return;
+  clearTimeout(workoutCloudSync.syncTimer);
+  workoutCloudSync.syncTimer = setTimeout(
+    () => syncWorkoutsToCloud(reason),
+    1500,
+  );
+}
+
+function scheduleEvaluationCloudSync(reason = 'silent') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncSuspended) return;
+  clearTimeout(evaluationCloudSync.syncTimer);
+  evaluationCloudSync.syncTimer = setTimeout(
+    () => syncEvaluationsToCloud(reason),
+    1500,
+  );
+}
+
+async function syncWorkoutsToCloud(reason = 'silent') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncSuspended) return;
+  if (workoutCloudSync.syncing) return;
+  workoutCloudSync.syncing = true;
+  renderProfileSummary();
+
+  ensureWorkoutIds();
+  const userId = cloudSyncState.user.id;
+  const now = new Date().toISOString();
+  const workoutRows = workouts.map((workout) => ({
+    id: workout.id,
+    user_id: userId,
+    name: workout.name || 'Treino',
+    division: workout.config?.division || null,
+    volume: workout.config?.volume || null,
+    days_per_week:
+      Number(workout.config?.daysPerWeek) ||
+      workout.days?.length ||
+      null,
+    created_at: workout.createdAt || now,
+    updated_at: now,
+  }));
+
+  try {
+    const { data: existing, error: existingError } =
+      await cloudSyncState.client
+        .from('workouts')
+        .select('id')
+        .eq('user_id', userId);
+
+    if (existingError) {
+      console.warn('Falha ao ler treinos da nuvem:', existingError);
+      showAuthFeedback('Erro ao sincronizar treinos.', 'error');
+      return;
+    }
+
+    if (workoutRows.length) {
+      const { error: upsertError } = await cloudSyncState.client
+        .from('workouts')
+        .upsert(workoutRows, { onConflict: 'id' });
+      if (upsertError) {
+        console.warn('Falha ao salvar treinos na nuvem:', upsertError);
+        showAuthFeedback('Erro ao salvar treinos.', 'error');
+        return;
+      }
+    }
+
+    const existingIds = (existing || []).map((item) => item.id);
+    const localIds = new Set(workoutRows.map((row) => row.id));
+    const toDelete = existingIds.filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await cloudSyncState.client.from('workouts').delete().in('id', toDelete);
+    }
+
+    for (let i = 0; i < workouts.length; i += 1) {
+      const workout = workouts[i];
+      const workoutId = workout.id;
+      await cloudSyncState.client
+        .from('workout_days')
+        .delete()
+        .eq('workout_id', workoutId);
+
+      const dayRows = (workout.days || []).map((day, index) => ({
+        id: createUuid(),
+        workout_id: workoutId,
+        day_index: index,
+        label: day.label || `Dia ${index + 1}`,
+        focus: day.focus || null,
+      }));
+
+      if (dayRows.length) {
+        const { error: dayError } = await cloudSyncState.client
+          .from('workout_days')
+          .insert(dayRows);
+        if (dayError) {
+          console.warn('Falha ao salvar dias do treino:', dayError);
+          showAuthFeedback('Erro ao salvar dias do treino.', 'error');
+          continue;
+        }
+
+        const exerciseRows = [];
+        dayRows.forEach((dayRow, dayIndex) => {
+          const exercisesList = workout.days?.[dayIndex]?.exercises || [];
+          exercisesList.forEach((exercise, orderIndex) => {
+            exerciseRows.push({
+              id: createUuid(),
+              day_id: dayRow.id,
+              exercise_id: Number.isFinite(exercise.id) ? exercise.id : null,
+              name: exercise.name || 'Exercício',
+              muscle: exercise.muscle || null,
+              equipment: exercise.equipment || null,
+              difficulty: exercise.difficulty || null,
+              sets: Number.isFinite(exercise.sets) ? exercise.sets : null,
+              reps: exercise.reps || null,
+              order_index: orderIndex,
+            });
+          });
+        });
+
+        if (exerciseRows.length) {
+          const { error: exerciseError } = await cloudSyncState.client
+            .from('workout_exercises')
+            .insert(exerciseRows);
+          if (exerciseError) {
+            console.warn('Falha ao salvar exercícios do treino:', exerciseError);
+            showAuthFeedback('Erro ao salvar exercícios do treino.', 'error');
+          }
+        }
+      }
+    }
+
+    workoutCloudSync.lastSyncAt = new Date().toISOString();
+    if (reason !== 'silent') {
+      showAuthFeedback('Treinos sincronizados.');
+    }
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Erro ao sincronizar treinos.', 'error');
+  } finally {
+    workoutCloudSync.syncing = false;
+    renderProfileSummary();
+  }
+}
+
+async function syncEvaluationsToCloud(reason = 'silent') {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  if (cloudSyncSuspended) return;
+  if (evaluationCloudSync.syncing) return;
+  evaluationCloudSync.syncing = true;
+  renderProfileSummary();
+
+  const userId = cloudSyncState.user.id;
+  const now = new Date().toISOString();
+  const rows = evaluations
+    .map((entry) => {
+      const localId = getEvaluationLocalId(entry);
+      if (!localId) return null;
+      return {
+        user_id: userId,
+        local_id: localId,
+        date: entry.date || null,
+        weight: toNumber(entry.weight),
+        height: toNumber(entry.height),
+        waist: toNumber(entry.waist),
+        neck: toNumber(entry.neck),
+        body_fat: toNumber(entry.bodyFat),
+        updated_at: now,
+      };
+    })
+    .filter(Boolean);
+
+  try {
+    const { data: existing, error: existingError } =
+      await cloudSyncState.client
+        .from(EVALUATIONS_TABLE)
+        .select('local_id')
+        .eq('user_id', userId);
+
+    if (existingError) {
+      console.warn('Falha ao ler avaliações da nuvem:', existingError);
+      showAuthFeedback('Erro ao sincronizar avaliações.', 'error');
+      return;
+    }
+
+    if (rows.length) {
+      const { error: upsertError } = await cloudSyncState.client
+        .from(EVALUATIONS_TABLE)
+        .upsert(rows, { onConflict: 'user_id,local_id' });
+      if (upsertError) {
+        console.warn('Falha ao salvar avaliações na nuvem:', upsertError);
+        showAuthFeedback('Erro ao salvar avaliações.', 'error');
+        return;
+      }
+    }
+
+    const existingIds = (existing || [])
+      .map((item) => Number(item.local_id))
+      .filter((value) => Number.isFinite(value));
+    const localIds = new Set(rows.map((row) => row.local_id));
+    const toDelete = existingIds.filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await cloudSyncState.client
+        .from(EVALUATIONS_TABLE)
+        .delete()
+        .eq('user_id', userId)
+        .in('local_id', toDelete);
+    }
+
+    evaluationCloudSync.lastSyncAt = new Date().toISOString();
+    if (reason !== 'silent') {
+      showAuthFeedback('Avaliações sincronizadas.');
+    }
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Erro ao sincronizar avaliações.', 'error');
+  } finally {
+    evaluationCloudSync.syncing = false;
+    renderProfileSummary();
+  }
+}
+
+async function loadEvaluationsFromCloud(fallbackEvaluations = []) {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  const userId = cloudSyncState.user.id;
+  try {
+    const { data, error } = await cloudSyncState.client
+      .from(EVALUATIONS_TABLE)
+      .select(
+        'local_id, date, weight, height, waist, neck, body_fat, updated_at',
+      )
+      .eq('user_id', userId)
+      .order('date', { ascending: false, nullsFirst: true });
+
+    if (error) {
+      console.warn('Erro ao carregar avaliações da nuvem:', error);
+      showAuthFeedback('Não foi possível carregar avaliações.', 'error');
+      return;
+    }
+
+    if (!data || !data.length) {
+      if (Array.isArray(fallbackEvaluations) && fallbackEvaluations.length) {
+        await syncEvaluationsToCloud('silent');
+      }
+      return;
+    }
+
+    const mapped = data.map((row) => ({
+      id: Number(row.local_id) || Date.now() + Math.random(),
+      date: row.date || '',
+      weight: toNumber(row.weight),
+      height: toNumber(row.height),
+      waist: toNumber(row.waist),
+      neck: toNumber(row.neck),
+      bodyFat: toNumber(row.body_fat),
+    }));
+
+    evaluations = normalizeEvaluations(mapped);
+    cloudSyncSuspended = true;
+    saveEvaluationsToStorage(evaluations);
+    cloudSyncSuspended = false;
+
+    const latestStamp = data.reduce((acc, row) => {
+      const time = parseTimestamp(row.updated_at);
+      return time > acc ? time : acc;
+    }, 0);
+    if (latestStamp) {
+      evaluationCloudSync.lastSyncAt = new Date(latestStamp).toISOString();
+    }
+
+    renderEvaluationsUI();
+    renderDashboard();
+    renderStrengthSection();
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Não foi possível carregar avaliações.', 'error');
+  }
+}
+
+async function loadWorkoutsFromCloud(fallbackWorkouts = []) {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  const userId = cloudSyncState.user.id;
+  try {
+    const { data, error } = await cloudSyncState.client
+      .from('workouts')
+      .select(
+        `id, name, division, volume, days_per_week, created_at, updated_at,
+         workout_days (
+           id, day_index, label, focus,
+           workout_exercises (
+             id, exercise_id, name, muscle, equipment, difficulty, sets, reps, order_index
+           )
+         )`,
+      )
+      .eq('user_id', userId);
+
+    if (error) {
+      console.warn('Erro ao carregar treinos da nuvem:', error);
+      showAuthFeedback('Não foi possível carregar seus treinos.', 'error');
+      return;
+    }
+
+    if (!data || !data.length) {
+      if (Array.isArray(fallbackWorkouts) && fallbackWorkouts.length) {
+        await syncWorkoutsToCloud('silent');
+      }
+      return;
+    }
+
+    const latestStamp = data.reduce((acc, row) => {
+      const time = parseTimestamp(row.updated_at || row.created_at);
+      return time > acc ? time : acc;
+    }, 0);
+
+    const mapped = data.map((row) => {
+      const days = (row.workout_days || [])
+        .slice()
+        .sort((a, b) => a.day_index - b.day_index)
+        .map((day) => ({
+          label: day.label || `Dia ${day.day_index + 1}`,
+          focus: day.focus || '',
+          exercises: (day.workout_exercises || [])
+            .slice()
+            .sort(
+              (a, b) =>
+                (a.order_index ?? 0) - (b.order_index ?? 0),
+            )
+            .map((exercise) => ({
+              id: Number.isFinite(exercise.exercise_id)
+                ? exercise.exercise_id
+                : null,
+              name: exercise.name || 'Exercício',
+              muscle: exercise.muscle || '',
+              equipment: exercise.equipment || '',
+              difficulty: exercise.difficulty || '',
+              sets: Number.isFinite(exercise.sets) ? exercise.sets : null,
+              reps: exercise.reps || '',
+            })),
+        }));
+
+      const workout = {
+        id: row.id,
+        name: row.name || 'Treino',
+        createdAt: row.created_at || new Date().toISOString(),
+        config: {
+          division: row.division || 'Sem Preferência',
+          volume: row.volume || 'medium',
+          daysPerWeek:
+            Number(row.days_per_week) || days.length || 0,
+        },
+        days,
+        metrics: {},
+      };
+      updateWorkoutMetrics(workout);
+      return workout;
+    });
+
+    workouts = normalizeWorkoutCollection(mapped);
+    cloudSyncSuspended = true;
+    saveWorkoutsToStorage(workouts);
+    cloudSyncSuspended = false;
+    if (latestStamp) {
+      workoutCloudSync.lastSyncAt = new Date(latestStamp).toISOString();
+    }
+    updateTreinosPage();
+    if (
+      activeWorkoutId &&
+      !workouts.some((workout) => workout.id === activeWorkoutId)
+    ) {
+      activeWorkoutId = null;
+    }
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Não foi possível carregar seus treinos.', 'error');
+  }
+}
+
+async function loadCloudState() {
+  if (!cloudSyncState.client || !cloudSyncState.user) return;
+  try {
+    const { data, error } = await cloudSyncState.client
+      .from(CLOUD_STATE_TABLE)
+      .select('data, updated_at')
+      .eq('user_id', cloudSyncState.user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Erro ao carregar dados da nuvem:', error);
+      showAuthFeedback('Não foi possível carregar seus dados.', 'error');
+      return;
+    }
+
+    if (!data || !data.data) {
+      await syncToCloud('silent');
+      return;
+    }
+
+    const remotePayload = data.data;
+    const remoteUpdatedAt = parseTimestamp(
+      remotePayload.updatedAt || data.updated_at,
+    );
+    const localUpdatedAt = parseTimestamp(stateMeta?.updatedAt);
+
+    if (!localUpdatedAt || remoteUpdatedAt >= localUpdatedAt) {
+      const applied = applyCloudPayload(remotePayload);
+      if (applied) showAuthFeedback('Dados carregados da nuvem.');
+    } else {
+      await syncToCloud('silent');
+    }
+  } catch (error) {
+    console.error(error);
+    showAuthFeedback('Erro ao carregar seus dados.', 'error');
+  } finally {
+    await loadEvaluationsFromCloud(evaluations);
+    await loadWorkoutsFromCloud(workouts);
+  }
+}
+
+async function initSupabase() {
+  const { url, anonKey, ready } = getSupabaseConfig();
+  if (!ready || !window.supabase?.createClient) {
+    handleAuthStateChange();
+    return;
+  }
+
+  cloudSyncState.client = window.supabase.createClient(url, anonKey);
+  cloudSyncState.ready = true;
+
+  try {
+    const { data, error } = await cloudSyncState.client.auth.getSession();
+    if (error) {
+      console.warn('Falha ao recuperar sessão:', error);
+    }
+    cloudSyncState.user = data?.session?.user || null;
+    handleAuthStateChange();
+
+    cloudSyncState.client.auth.onAuthStateChange((_event, session) => {
+      cloudSyncState.user = session?.user || null;
+      handleAuthStateChange();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handleAuthLogout() {
+  if (!cloudSyncState.client) return;
+  await safeSignOut();
+  cloudSyncState.user = null;
+  clearTimeout(cloudSyncState.syncTimer);
+  clearTimeout(workoutCloudSync.syncTimer);
+  clearTimeout(evaluationCloudSync.syncTimer);
+  handleAuthStateChange();
+  showAuthFeedback('Você saiu da conta.');
 }
 
 /* ===================== WORKOUTS ===================== */
@@ -1229,6 +4408,7 @@ function renderWorkoutCards() {
       </article>`,
     )
     .join('');
+  renderDashboard();
 }
 
 workoutList?.addEventListener('click', (event) => {
@@ -1250,9 +4430,6 @@ function openWorkoutModal() {
   if (!workoutModal) return;
   workoutState.furthestStep = 1;
   workoutState.generationFinished = false;
-  workoutModal.classList.add('is-active');
-  workoutModal.setAttribute('aria-hidden', 'false');
-  document.body?.classList.add('modal-open');
   goToWorkoutStep(1);
   if (generationResult) generationResult.style.display = 'none';
   generationProgress
@@ -1262,13 +4439,16 @@ function openWorkoutModal() {
   if (bar) bar.style.width = '0%';
   resetGenerationButton();
   updateRequirementSummary();
+  const focusTarget =
+    divisionOptions?.querySelector('input:checked') ||
+    divisionOptions?.querySelector('input') ||
+    daysOptions?.querySelector('button.is-selected') ||
+    daysOptions?.querySelector('button');
+  openModal(workoutModal, { initialFocus: focusTarget });
 }
 
 function closeWorkoutModal() {
-  if (!workoutModal) return;
-  workoutModal.classList.remove('is-active');
-  workoutModal.setAttribute('aria-hidden', 'true');
-  document.body?.classList.remove('modal-open');
+  closeModal(workoutModal);
 }
 
 function goToWorkoutStep(step) {
@@ -1391,132 +4571,6 @@ function getMuscleCategory(muscle = '') {
   return 'Outros';
 }
 
-function getExercisesByIds(ids = []) {
-  return exercises.filter((ex) => ids.includes(ex.id));
-}
-
-function ensureMinimumPool(pool = []) {
-  const counts = countExercisesByCategory(pool.map((ex) => ex.id));
-  const result = [...pool];
-  Object.entries(MIN_EXERCISES).forEach(([category, min]) => {
-    const current = counts[category] || 0;
-    if (current >= min) return;
-    const needed = min - current;
-    const candidates = exercises.filter(
-      (ex) =>
-        getMuscleCategory(ex.muscle) === category &&
-        !result.some((existing) => existing.id === ex.id),
-    );
-    result.push(...candidates.slice(0, needed));
-  });
-  return result;
-}
-
-function getDivisionTemplate(division, days) {
-  const templates = {
-    'Bro Split': [
-      { label: 'Dia A - Peitoral', muscles: ['Peitoral', 'Ombros'] },
-      { label: 'Dia B - Costas', muscles: ['Costas', 'Braços'] },
-      { label: 'Dia C - Pernas', muscles: ['Pernas'] },
-      { label: 'Dia D - Ombros', muscles: ['Ombros', 'Braços'] },
-      { label: 'Dia E - Braços', muscles: ['Braços'] },
-    ],
-    PPL: [
-      { label: 'Dia Push', muscles: ['Peitoral', 'Ombros', 'Braços'] },
-      { label: 'Dia Pull', muscles: ['Costas', 'Braços'] },
-      { label: 'Dia Legs', muscles: ['Pernas'] },
-    ],
-    'Upper Lower': [
-      {
-        label: 'Dia Upper',
-        muscles: ['Peitoral', 'Costas', 'Braços', 'Ombros'],
-      },
-      { label: 'Dia Lower', muscles: ['Pernas'] },
-    ],
-    'PPL + UL': [
-      { label: 'Push', muscles: ['Peitoral', 'Ombros'] },
-      { label: 'Pull', muscles: ['Costas', 'Braços'] },
-      { label: 'Legs', muscles: ['Pernas'] },
-      { label: 'Upper', muscles: ['Peitoral', 'Ombros', 'Braços'] },
-      { label: 'Lower', muscles: ['Pernas'] },
-    ],
-    'Full Body': [
-      {
-        label: 'Full Body',
-        muscles: ['Peitoral', 'Costas', 'Pernas', 'Ombros', 'Braços'],
-      },
-    ],
-    'Sem Preferência': [
-      { label: 'Peito + Ombro', muscles: ['Peitoral', 'Ombros'] },
-      { label: 'Costas + Braços', muscles: ['Costas', 'Braços'] },
-      { label: 'Pernas', muscles: ['Pernas'] },
-    ],
-  };
-
-  const base = templates[division] || templates['Sem Preferência'];
-  const output = [];
-  for (let i = 0; i < days; i += 1) {
-    output.push(base[i % base.length]);
-  }
-  return output.map((entry, index) => ({
-    label: entry.label || `Dia ${String.fromCharCode(65 + index)}`,
-    muscles: entry.muscles,
-  }));
-}
-
-const volumePresets = {
-  low: { exercisesPerMuscle: 1, sets: 3, reps: '8-10' },
-  medium: { exercisesPerMuscle: 2, sets: 4, reps: '10-12' },
-  high: { exercisesPerMuscle: 3, sets: 5, reps: '12-15' },
-  deload: { exercisesPerMuscle: 1, sets: 2, reps: '8-10' },
-};
-
-function pickExerciseFromPool(
-  pool,
-  targetMuscle,
-  usageTracker,
-  usedInDay,
-  lastExerciseId,
-  allowedCategories = [],
-) {
-  const category = getMuscleCategory(targetMuscle);
-  const byCategory = pool.filter(
-    (ex) => getMuscleCategory(ex.muscle) === category,
-  );
-  const allowedPool =
-    allowedCategories.length > 0
-      ? pool.filter((ex) =>
-          allowedCategories.includes(getMuscleCategory(ex.muscle)),
-        )
-      : pool;
-
-  const candidate =
-    findBestCandidate(byCategory, usageTracker, usedInDay, lastExerciseId) ||
-    findBestCandidate(allowedPool, usageTracker, usedInDay, lastExerciseId);
-
-  if (!candidate) return null;
-
-  usedInDay.add(candidate.id);
-  usageTracker.set(candidate.id, (usageTracker.get(candidate.id) || 0) + 1);
-  return candidate;
-}
-
-function findBestCandidate(dataset, usageTracker, usedInDay, lastExerciseId) {
-  if (!dataset.length) return null;
-  const sorted = [...dataset].sort(
-    (a, b) => (usageTracker.get(a.id) || 0) - (usageTracker.get(b.id) || 0),
-  );
-  for (const exercise of sorted) {
-    if (usedInDay.has(exercise.id)) continue;
-    if (exercise.id === lastExerciseId) continue;
-    return exercise;
-  }
-  for (const exercise of sorted) {
-    if (!usedInDay.has(exercise.id)) return exercise;
-  }
-  return null;
-}
-
 function formatExercisePrescription(exercise = {}) {
   const sets = Number.isFinite(exercise.sets) ? exercise.sets : '';
   const reps = exercise.reps || '';
@@ -1539,136 +4593,42 @@ function updateWorkoutMetrics(workout) {
   workout.metrics.volumeTotal = totalSets;
 }
 
-function generateWorkoutPlan(execTime = 0) {
-  const config = workoutState.config;
-  let pool =
-    config.exerciseSource === 'selected'
-      ? getExercisesByIds(selectedExercises)
-      : [];
-
-  if (config.exerciseSource === 'ai' || !pool.length) {
-    pool = [];
-  }
-
-  pool = ensureMinimumPool(pool);
-  if (!pool.length) {
-    pool = ensureMinimumPool(exercises.slice(0, 20));
-  }
-
-  const templates = getDivisionTemplate(config.division, config.daysPerWeek);
-  const volumePreset = volumePresets[config.volume] || volumePresets.medium;
-  const defaultPrescription = formatExercisePrescription({
-    sets: volumePreset.sets,
-    reps: volumePreset.reps,
+function generateAIWorkoutPlan(execTime = 0) {
+  if (!window.AIWorkoutGenerator?.generatePlan) return null;
+  const result = window.AIWorkoutGenerator.generatePlan({
+    config: workoutState.config,
+    exercises,
+    selectedExercises,
+    profile: profileData,
   });
-  const usageTracker = new Map();
-
-  const days = templates.map((template, index) => {
-    const usedInDay = new Set();
-    let lastExerciseId = null;
-    const allowedCategories = Array.from(
-      new Set(template.muscles.map((muscle) => getMuscleCategory(muscle))),
-    );
-    const exercisesForDay = [];
-    template.muscles.forEach((muscle) => {
-      for (let i = 0; i < volumePreset.exercisesPerMuscle; i += 1) {
-        const picked = pickExerciseFromPool(
-          pool,
-          muscle,
-          usageTracker,
-          usedInDay,
-          lastExerciseId,
-          allowedCategories,
-        );
-        if (picked) {
-          exercisesForDay.push({
-            id: picked.id,
-            name: picked.name,
-            muscle: picked.muscle,
-            equipment: picked.equipment,
-            sets: volumePreset.sets,
-            reps: volumePreset.reps,
-            prescription: defaultPrescription,
-          });
-          lastExerciseId = picked.id;
-        }
-      }
-    });
-
-    if (!exercisesForDay.length) {
-      const fallbackMuscles = allowedCategories.length
-        ? allowedCategories
-        : ['Peitoral', 'Costas', 'Braços', 'Ombros', 'Pernas'];
-      for (let i = 0; i < Math.min(2, fallbackMuscles.length); i += 1) {
-        const fallback = pickExerciseFromPool(
-          pool,
-          fallbackMuscles[i],
-          usageTracker,
-          usedInDay,
-          lastExerciseId,
-          allowedCategories,
-        );
-        if (fallback) {
-          exercisesForDay.push({
-            id: fallback.id,
-            name: fallback.name,
-            muscle: fallback.muscle,
-            equipment: fallback.equipment,
-            sets: volumePreset.sets,
-            reps: volumePreset.reps,
-            prescription: defaultPrescription,
-          });
-          lastExerciseId = fallback.id;
-        }
-      }
-    }
-
-    return {
-      label: template.label || `Dia ${String.fromCharCode(65 + index)}`,
-      focus: template.muscles.join(' / '),
-      exercises: exercisesForDay,
-    };
-  });
-
-  if (days.length > 1) {
-    for (let i = 1; i < days.length; i += 1) {
-      if (days[i].label === days[i - 1].label) {
-        days[i].label = `${days[i].label} • Variação`;
-      }
-    }
-    if (days[0].label === days[days.length - 1].label) {
-      days[days.length - 1].label = `${days[days.length - 1].label} • Extra`;
-    }
-  }
-
-  const equipmentSwitches = days.reduce(
-    (acc, day) => acc + calculateEquipmentSwitches(day.exercises),
-    0,
-  );
-  const volumeTotal = days.reduce(
-    (acc, day) =>
-      acc +
-      day.exercises.reduce(
-        (sum, exercise) => sum + (Number(exercise.sets) || volumePreset.sets),
-        0,
-      ),
-    0,
-  );
+  if (!result || !Array.isArray(result.days)) return null;
 
   const plan = {
-    id: `${Date.now()}`,
+    id: createUuid(),
     name: `Treino ${workouts.length + 1}`,
     createdAt: new Date().toISOString(),
-    config: { ...config },
-    days,
+    config: { ...workoutState.config },
+    days: result.days,
     metrics: {
-      algorithm: 'Graph Planner v1',
+      algorithm: 'AI Planner',
       timeMs: execTime,
-      equipmentSwitches,
-      volumeTotal,
+      equipmentSwitches: result.days.reduce(
+        (acc, day) => acc + calculateEquipmentSwitches(day.exercises),
+        0,
+      ),
+      volumeTotal: result.days.reduce(
+        (acc, day) =>
+          acc +
+          day.exercises.reduce(
+            (sum, exercise) => sum + (Number(exercise.sets) || 0),
+            0,
+          ),
+        0,
+      ),
     },
   };
-  return normalizeWorkout(plan);
+
+  return { plan: normalizeWorkout(plan), meta: result.meta || {} };
 }
 
 function calculateEquipmentSwitches(exercisesList = []) {
@@ -1679,6 +4639,23 @@ function calculateEquipmentSwitches(exercisesList = []) {
       switches += 1;
   }
   return switches;
+}
+
+function applyAiSelection(plan) {
+  if (!plan || !Array.isArray(plan.days)) return;
+  const ids = plan.days
+    .flatMap((day) => day.exercises || [])
+    .map((exercise) => exercise.id)
+    .filter((id) => Number.isFinite(id));
+  if (!ids.length) return;
+  selectedExercises = normalizeSelectedExercises([
+    ...selectedExercises,
+    ...ids,
+  ]);
+  saveSelectedExercises();
+  updateSelectedCount();
+  search();
+  updateTreinosPage();
 }
 
 function showWorkoutDetails(id, options = {}) {
@@ -2137,6 +5114,25 @@ function handleWorkoutDayRename(dayIndex) {
   showWorkoutDetails(workout.id);
 }
 
+async function handleWorkoutExportPdf() {
+  if (!activeWorkoutId) return;
+  const workout = workouts.find((w) => w.id === activeWorkoutId);
+  if (!workout) return;
+  if (!window.PDFExporter?.exportWorkoutPdf) {
+    alert('Exportação PDF indisponível no momento.');
+    return;
+  }
+  try {
+    await window.PDFExporter.exportWorkoutPdf(workout, {
+      profile: profileData,
+      preview: true,
+    });
+  } catch (error) {
+    console.error(error);
+    alert('Não foi possível gerar o PDF.');
+  }
+}
+
 function openDeleteWorkoutModal(workoutId) {
   if (!deleteWorkoutModal || !workoutId) return;
   workoutPendingDeletion = workoutId;
@@ -2144,17 +5140,12 @@ function openDeleteWorkoutModal(workoutId) {
   if (deleteWorkoutName) {
     deleteWorkoutName.textContent = workout ? workout.name : '';
   }
-  deleteWorkoutModal.classList.add('is-active');
-  deleteWorkoutModal.setAttribute('aria-hidden', 'false');
-  document.body?.classList.add('modal-open');
+  openModal(deleteWorkoutModal, { initialFocus: '#confirmDeleteWorkoutBtn' });
 }
 
 function closeDeleteWorkoutModal() {
-  if (!deleteWorkoutModal) return;
   workoutPendingDeletion = null;
-  deleteWorkoutModal.classList.remove('is-active');
-  deleteWorkoutModal.setAttribute('aria-hidden', 'true');
-  document.body?.classList.remove('modal-open');
+  closeModal(deleteWorkoutModal);
 }
 
 function confirmWorkoutDeletion() {
@@ -2199,6 +5190,7 @@ function runWorkoutGeneration() {
   if (!generationProgress) return;
   if (generationResult) generationResult.style.display = 'none';
   const tasks = [...generationProgress.querySelectorAll('li')];
+  const stepDelay = 220;
   tasks.forEach((task) => task.classList.remove('is-complete'));
   const bar = generationProgress.querySelector('.progress-bar span');
   if (bar) bar.style.width = '0%';
@@ -2213,27 +5205,40 @@ function runWorkoutGeneration() {
     setTimeout(() => {
       task.classList.add('is-complete');
       if (bar) bar.style.width = `${((index + 1) / tasks.length) * 100}%`;
-    }, 400 * (index + 1));
+    }, stepDelay * (index + 1));
   });
 
   setTimeout(() => {
-    const plan = generateWorkoutPlan(performance.now() - start);
+    const execTime = performance.now() - start;
+    const result = generateAIWorkoutPlan(execTime);
+    const plan = result?.plan;
+    if (!plan) {
+      generationResult.innerHTML =
+        '<strong>Não foi possível gerar o treino.</strong> Tente ajustar os parâmetros.';
+      generationResult.style.display = 'block';
+      resetGenerationButton();
+      return;
+    }
+
     workouts.push(plan);
     saveWorkoutsToStorage(workouts);
     renderWorkoutCards();
     showWorkoutDetails(plan.id);
+
+    const warningText = result?.meta?.warning;
     generationResult.innerHTML = `<strong>Treino gerado!</strong> Tempo: ${plan.metrics.timeMs.toFixed(
       2,
     )} ms • Volume total: ${
       plan.metrics.volumeTotal
-    } séries • Trocas de equipamento: ${plan.metrics.equipmentSwitches}`;
+    } séries${warningText ? `<br><span style="color: var(--muted); font-size: 13px;">${warningText}</span>` : ''}`;
+    applyAiSelection(plan);
     generationResult.style.display = 'block';
     markGenerationFinished();
     if (generateWorkoutBtn) {
       generateWorkoutBtn.disabled = false;
       generateWorkoutBtn.classList.remove('is-loading');
     }
-  }, 400 * tasks.length + 300);
+  }, stepDelay * tasks.length + 300);
 }
 
 function resetGenerationButton() {
@@ -2251,177 +5256,43 @@ function markGenerationFinished() {
   generateWorkoutBtn.classList.add('is-finished');
 }
 
-/* ===================== GRAFOS ===================== */
-
-const recoveryDependencies = {
-  Costas: ['Bíceps', 'Antebraços'],
-  Peitoral: ['Tríceps', 'Ombros'],
-  Pernas: ['Glúteos', 'Panturrilhas'],
-  Ombros: ['Tríceps'],
-};
-
-function buildWorkoutGraph(selectedIds = []) {
-  if (!window.GraphRepresentation?.Graph) return null;
-  if (!selectedIds.length) return null;
-
-  const graph = new window.GraphRepresentation.Graph({
-    directed: true,
-    weighted: true,
-  });
-  const selectedData = exercises.filter((ex) => selectedIds.includes(ex.id));
-  if (!selectedData.length) return null;
-
-  selectedData.forEach((exercise) => {
-    graph.addVertex(String(exercise.id), {
-      name: exercise.name,
-      muscle: exercise.muscle,
-      equipment: exercise.equipment,
-    });
-  });
-
-  for (let i = 0; i < selectedData.length; i += 1) {
-    for (let j = 0; j < selectedData.length; j += 1) {
-      if (i === j) continue;
-      const from = selectedData[i];
-      const to = selectedData[j];
-      const weight = calculateEdgeWeight(from, to);
-      if (Number.isFinite(weight)) {
-        graph.addEdge(String(from.id), String(to.id), weight);
-      }
-    }
-  }
-
-  return graph;
-}
-
-function calculateEdgeWeight(from, to) {
-  let cost = 1;
-  cost += from.equipment === to.equipment ? 1 : 4;
-  cost += from.muscle === to.muscle ? 1 : 2;
-
-  if (hasRecoveryDependency(from.muscle, to.muscle)) {
-    cost += 2;
-  }
-
-  return Math.max(1, Math.round(cost));
-}
-
-function hasRecoveryDependency(fromMuscle, toMuscle) {
-  const deps = recoveryDependencies[fromMuscle];
-  if (!deps) return false;
-  return deps.includes(toMuscle);
-}
-
-function updateGraphRepresentations() {
-  if (!document.getElementById('graphPanels')) return;
-  const graph = buildWorkoutGraph(selectedExercises);
-  renderGraphRepresentations(graph);
-}
-
-function renderGraphRepresentations(graph) {
-  const emptyState = document.getElementById('graphEmptyState');
-  const panels = document.getElementById('graphPanels');
-  const matrixTable = document.getElementById('adjacencyMatrixTable');
-  const listContainer = document.getElementById('adjacencyListContainer');
-
-  if (!emptyState || !panels || !matrixTable || !listContainer) return;
-
-  if (!graph || graph.vertices.size === 0) {
-    emptyState.style.display = 'flex';
-    panels.style.display = 'none';
-    matrixTable.innerHTML = '';
-    listContainer.innerHTML = '';
-    return;
-  }
-
-  emptyState.style.display = 'none';
-  panels.style.display = 'grid';
-
-  const { ids, matrix } = graph.toAdjacencyMatrix();
-  const headerCells = ids
-    .map((id) => `<th>${graph.vertices.get(id)?.name || id}</th>`)
-    .join('');
-  const header = `<tr><th>Exercício</th>${headerCells}</tr>`;
-  const rows = ids
-    .map((id, rowIndex) => {
-      const cells = matrix[rowIndex]
-        .map((value) => `<td>${value || ''}</td>`)
-        .join('');
-      return `<tr><th>${graph.vertices.get(id)?.name || id}</th>${cells}</tr>`;
-    })
-    .join('');
-  matrixTable.innerHTML = `<thead>${header}</thead><tbody>${rows}</tbody>`;
-
-  const adjacencyList = graph.toAdjacencyList();
-  listContainer.innerHTML = ids
-    .map((id) => {
-      const vertex = graph.vertices.get(id);
-      const neighbors = adjacencyList[id];
-      const chips = neighbors.length
-        ? neighbors
-            .map((neighbor) => {
-              const label =
-                graph.vertices.get(neighbor.id)?.name || neighbor.id;
-              return `<span>${label} • ${neighbor.weight}</span>`;
-            })
-            .join('')
-        : '<span>Sem conexões</span>';
-      return `<div class="graph-list-item"><strong>${
-        vertex?.name || id
-      }</strong>${chips}</div>`;
-    })
-    .join('');
-}
 
 /* FUNÇÕES EXTRAS */
 
 function clearAllData() {
-  localStorage.clear();
+  storageService.clearAll();
   selectedExercises = [];
   profileData = {};
   evaluations = [];
+  sessionLogs = [];
   workouts = [];
+  touchStateMeta();
+  scheduleCloudSync('clear');
+  scheduleWorkoutCloudSync('clear');
+  scheduleEvaluationCloudSync('clear');
 
   updateSelectedCount();
-  render(exercises, null);
+  search();
   updateTreinosPage();
   populateProfileForm({});
   renderEvaluationsUI();
-  renderWorkoutCards();
-  updateRequirementSummary();
+  renderStrengthSection();
+  renderSessionUI();
   closeEvaluationModal();
   closeClearModal();
   closeExportModal();
 
   const activePageEl = document.querySelector('.page.active');
-  const currentPage = activePageEl?.id?.replace('page-', '') || 'exercicios';
+  const currentPage = activePageEl?.id?.replace('page-', '') || 'dashboard';
   saveActivePage(currentPage);
 
   alert('✅ Todos os dados foram limpos com sucesso!');
   showSuccessFeedback('Todos os dados foram limpos com sucesso!');
 }
 
-function showStorageInfo() {
-  const exercisesRaw = localStorage.getItem('nushape_selected_exercises') || '';
-  const profileRaw = localStorage.getItem(PROFILE_STORAGE_KEY) || '';
-  const evaluationsRaw = localStorage.getItem(EVALUATION_STORAGE_KEY) || '';
-  const size = new Blob([exercisesRaw, profileRaw, evaluationsRaw]).size;
-  const hasProfile = Object.values(profileData || {}).some((value) => value);
-
-  alert(
-    `ℹ️ Informações de Armazenamento\n\nExercícios salvos: ${
-      selectedExercises.length
-    }\nDados pessoais salvos: ${
-      hasProfile ? 'Sim' : 'Não'
-    }\nAvaliações registradas: ${
-      evaluations.length
-    }\nTamanho estimado: ${size} bytes\n\nOs dados são salvos localmente no seu navegador e persistem entre sessões.`,
-  );
-}
-
+initSupabase();
 loadSelectedExercises();
-render(exercises, null);
+search();
 updateSelectedCount();
 const initialPage = loadActivePage();
 navigateTo(initialPage);
-updateGraphRepresentations();
