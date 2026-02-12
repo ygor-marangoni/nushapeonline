@@ -231,6 +231,7 @@ const strengthChartState = {
 let pendingConfirmEmail = '';
 let registerCooldownUntil = 0;
 let registerCooldownTimer = null;
+const REGISTER_COOLDOWN_SECONDS = 15;
 
 const cloudSyncState = {
   client: null,
@@ -2655,7 +2656,7 @@ function updateRegisterCooldown() {
   }
 }
 
-function startRegisterCooldown(seconds = 60) {
+function startRegisterCooldown(seconds = REGISTER_COOLDOWN_SECONDS) {
   registerCooldownUntil = Date.now() + seconds * 1000;
   updateRegisterCooldown();
 }
@@ -2742,10 +2743,22 @@ async function handleRegisterSubmit(event) {
   if (error) {
     const message = String(error?.message || '').toLowerCase();
     const status = error?.status || error?.statusCode;
-    if (status === 429 || message.includes('rate') || message.includes('too')) {
-      startRegisterCooldown(60);
+    const code = String(error?.code || '').toLowerCase();
+    if (
+      code === 'over_email_send_rate_limit' ||
+      message.includes('email rate limit')
+    ) {
+      startRegisterCooldown(300);
       showAuthFeedback(
-        'Muitas tentativas. Aguarde 1 minuto e tente novamente.',
+        'Limite de envio de email do Supabase atingido. Aguarde alguns minutos ou desative a confirmação de email no Supabase.',
+        'error',
+      );
+      return;
+    }
+    if (status === 429 || message.includes('rate') || message.includes('too')) {
+      startRegisterCooldown(REGISTER_COOLDOWN_SECONDS);
+      showAuthFeedback(
+        `Muitas tentativas. Aguarde ${REGISTER_COOLDOWN_SECONDS}s e tente novamente.`,
         'error',
       );
       return;
@@ -2823,10 +2836,22 @@ async function handleResendConfirmation(event) {
     if (error) {
       const message = String(error?.message || '').toLowerCase();
       const status = error?.status || error?.statusCode;
-      if (status === 429 || message.includes('rate') || message.includes('too')) {
-        startRegisterCooldown(60);
+      const code = String(error?.code || '').toLowerCase();
+      if (
+        code === 'over_email_send_rate_limit' ||
+        message.includes('email rate limit')
+      ) {
+        startRegisterCooldown(300);
         showAuthFeedback(
-          'Muitas tentativas. Aguarde 1 minuto e tente novamente.',
+          'Limite de envio de email do Supabase atingido. Aguarde alguns minutos antes de reenviar.',
+          'error',
+        );
+        return;
+      }
+      if (status === 429 || message.includes('rate') || message.includes('too')) {
+        startRegisterCooldown(REGISTER_COOLDOWN_SECONDS);
+        showAuthFeedback(
+          `Muitas tentativas. Aguarde ${REGISTER_COOLDOWN_SECONDS}s e tente novamente.`,
           'error',
         );
         return;
